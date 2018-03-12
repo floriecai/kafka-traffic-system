@@ -53,5 +53,21 @@ type Producer interface {
 	Write(topicName string, gpsCoordinates shared.GPSCoordinates) (err error)
 }
 
+type ProducerNode struct {
+	shared.Node
+}
+
+func (pn ProducerNode) CreateTopic(topicName string) (topic shared.Topic, err error) {
+	// TODO
+}
+
+func (pn ProducerNode) GetTopic(topicName string) (topic shared.Topic, err error) {
+	// TODO
+}
+
+func (pn ProducerNode) Write(topicName string, gpsCoordinates shared.GPSCoordinates) (err error) {
+	// TODO
+}
+
 // </API>
 ///////////////////////////////////////////////////////////////////////////////////////////////////
