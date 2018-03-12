@@ -34,9 +34,9 @@ func (e InsufficientNodesError) Error() string {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // <DATA STRUCTURES>
 
-// Used in Follow() to specify 
+// Probably incomplete in its current state; extend as we see fit
+// Used in Follow() to specify configuration details to Leader
 type FollowerSettings struct {
-	// TODO
 	IPAddr    net.Addr
 	TopicName string
 }
