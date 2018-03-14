@@ -49,3 +49,7 @@ def main():
 
     ssh(ip)
     run(fp)
+
+
+if __name__ == '__main__':
+    main()
