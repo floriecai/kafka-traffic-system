@@ -18,8 +18,7 @@ def ssh(ip, pw):
     Only log in with SSH key
     TODO: Finish drafting this
     """
-    subprocess.run(['sshpass', '-p', pw])
-    subprocess.run(['ssh', ip])
+    subprocess.run(['sshpass', '-p', pw, 'ssh', '-i', '~/.ssh/id_rsa', ip])
 
 
 def main():
@@ -39,12 +38,12 @@ def main():
     if args.file not in VALID_FILES:
         raise ValueError('File must be one of %s' % VALID_FILES)
     
-    ip = ""
+    ip = "416@"
 
     with open('vm-ips.txt') as f:
         for l, v in enumerate(f):
             if l == args.vm - 1:
-                ip = v
+                ip += v
 
     pw = ""
 
