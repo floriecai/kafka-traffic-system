@@ -2,28 +2,27 @@ import argparse
 import os
 import subprocess
 
-VALID_FILES = {'main': 'node/main.go', 'server': 'server/server.go', 'azure': 'azureinstall.sh'}
+VALID_FILES = {'main': 'node/main.go', 'server': 'server/server.go'}
 
 def run(fp):
     """
     Run a specific file once connecting to a VM
     TODO: Finish drafting this
     """
-    if 'azure' in fp:
-        subprocess.run(['chmod', '+x', fp])
-        subprocess.run(['sh', fp])
-        subprocess.run(['source', '.profile'])
-    else:
-        subprocess.run(['go', 'run', fp])
+    subprocess.run(['go', 'run', fp])
 
 
-def ssh(ip, pw):
+def ssh(ip, pw, debug):
     """
     Our Azure VMs do not have passwords
     Only log in with SSH key
     TODO: Finish drafting this
     """
-    subprocess.run(['sshpass', '-p', pw, 'ssh', '-i', '~/.ssh/id_rsa', ip])
+    if debug:
+        subprocess.run(['sshpass', '-p', pw, 'ssh', '-v', '-i', '~/.ssh/id_rsa', ip])
+    else:
+        subprocess.run(['sshpass', '-p', pw, 'ssh', '-i', '~/.ssh/id_rsa', ip])
+    print('Finished SSHing')
 
 
 def main():
@@ -36,6 +35,7 @@ def main():
                         help='the index of the VM to SSH into')
     parser.add_argument('-f', '--file', metavar='file', type=str,
                         help='the name of the file to run')
+    parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
 
     if args.vm < 1 or args.vm > 10:
@@ -59,8 +59,8 @@ def main():
     
     fp = VALID_FILES[args.file]
 
-    ssh(ip, pw)
-    run(fp)
+    ssh(ip, pw, args.debug)
+    # run(fp)
 
 
 if __name__ == '__main__':
