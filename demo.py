@@ -2,14 +2,19 @@ import argparse
 import os
 import subprocess
 
-VALID_FILES = {'main': 'node/main.go', 'server': 'server/server.go'}
+VALID_FILES = {'main': 'node/main.go', 'server': 'server/server.go', 'azure': 'azureinstall.sh'}
 
 def run(fp):
     """
     Run a specific file once connecting to a VM
     TODO: Finish drafting this
     """
-    subprocess.run(['go', 'run', fp])
+    if 'azure' in fp:
+        subprocess.run(['chmod', '+x', fp])
+        subprocess.run(['sh', fp])
+        subprocess.run(['source', '.profile'])
+    else:
+        subprocess.run(['go', 'run', fp])
 
 
 def ssh(ip, pw):
