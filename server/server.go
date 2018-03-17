@@ -58,6 +58,7 @@ type TServer struct {
 	// TopicName -> shared.Topic
 	TopicMap       sync.Map
 	MinReplicasNum uint32
+	TopicsFileLock sync.Mutex
 }
 
 type NodeSettings struct {
@@ -81,7 +82,7 @@ type Config struct {
 }
 
 const (
-	topicFile string = "topics.json"
+	topicFile string = "./topics.json"
 )
 
 type AllNodes struct {
@@ -90,6 +91,7 @@ type AllNodes struct {
 }
 
 var (
+	tServer  *TServer
 	config   Config
 	allNodes AllNodes    = AllNodes{all: make(map[string]*Node)}
 	errLog   *log.Logger = log.New(os.Stderr, "[serv] ", log.Lshortfile|log.LUTC|log.Lmicroseconds)
@@ -136,8 +138,16 @@ func (s *TServer) Register(n NodeInfo, nodeSettings *NodeSettings) error {
 
 // Writes to disk any connections that have been made to the server along
 // with their corresponding topics (if any)
-func updateDisk(addr string, topicName string) error {
-	return nil
+func updateNodeMap(addr string, topicName string, server *TServer) error {
+	// server.NodeMap.Load()
+	_, err := os.OpenFile(topicFile, os.O_WRONLY, 0644)
+
+	if err == nil {
+		// f.Write
+		return nil
+	}
+
+	return err
 }
 
 func monitor(k string, heartBeatInterval time.Duration) {
@@ -264,9 +274,9 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	// Set up Server RPC
-	tserver := new(TServer)
+	tServer = new(TServer)
 	server := rpc.NewServer()
-	server.Register(tserver)
+	server.Register(tServer)
 
 	l, err := net.Listen("tcp", config.RpcIpPort)
 
