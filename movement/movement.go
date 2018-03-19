@@ -229,10 +229,8 @@ func getLineParams(p1, p2 Point) (sT slopeType, slope, intercept float64) {
 	if p1.X == p2.X {
 		// Check for infinite slope.
 		if p2.Y > p1.Y {
-			//fmt.Println("INFUP slope")
 			sT = INFUP
 		} else {
-			//fmt.Println("INFDOWN slope")
 			sT = INFDOWN
 		}
 
@@ -240,10 +238,8 @@ func getLineParams(p1, p2 Point) (sT slopeType, slope, intercept float64) {
 	} else if p1.Y == p2.Y {
 		// check for zero slope
 		if p2.X > p1.X {
-			//fmt.Println("INFUP slope")
 			sT = ZERORIGHT
 		} else {
-			//fmt.Println("INFDOWN slope")
 			sT = ZEROLEFT
 		}
 
@@ -254,18 +250,14 @@ func getLineParams(p1, p2 Point) (sT slopeType, slope, intercept float64) {
 		slope, intercept = getSlopeIntercept(p1, p2)
 		if p1.X < p2.X {
 			if slope > 0 {
-				//fmt.Println("POSRIGHT slope")
 				sT = POSRIGHT
 			} else {
-				//fmt.Println("NEGRIGHT slope")
 				sT = NEGRIGHT
 			}
 		} else {
 			if slope > 0 {
-				//fmt.Println("POSLEFT slope")
 				sT = POSLEFT
 			} else {
-				//fmt.Println("NEGLEFT slope")
 				sT = NEGLEFT
 			}
 		}
