@@ -1,6 +1,7 @@
 package main
 
 import ("./clusterlib"
+		"../structs"
 		"fmt"
 		"net/rpc"
 		"net"
@@ -28,13 +29,15 @@ func ListenClusterRpc() {
 	server.Accept(tcp)
 }
 
-// TODO: Decide on message struct
-func (c ClusterRpc) Read(coords string, response *string) error {
-	
+func (c ClusterRpc) Write(coords structs.Coords, response *string) error {
+	err := node.WriteFile(coords)
+	return err	
 }
 
-func (c ClusterRpc) Write(req int, response *string) error {
-
+func (c ClusterRpc) Read(req int, response *string) error {
+	data, err := node.ReadFile(req)
+	*response = data
+	return err
 }
 
 /*******************************
@@ -55,6 +58,8 @@ func ListenPeerRpc() {
 ********************************/
 func main() {
 	serverIP := os.Args[1]
+	// Open Filesystem
+	node.MountFile()
 	// Open Cluster to App RPC
 	go ListenClusterRpc()
 	// Open Peer to Peer RPC
