@@ -1,1 +1,2 @@
-Special instructions for compiling/running the code should be included in this file.
+Script requires Spur:
+https://github.com/mwilliamson/spur.py
