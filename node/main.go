@@ -28,6 +28,14 @@ func ListenClusterRpc() {
 	server.Accept(tcp)
 }
 
+// TODO: Decide on message struct
+func (c ClusterRpc) Read(coords string, response *string) error {
+	
+}
+
+func (c ClusterRpc) Write(req int, response *string) error {
+
+}
 
 /*******************************
 | Peer RPC Calls
