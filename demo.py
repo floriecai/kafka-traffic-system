@@ -1,66 +1,105 @@
-import argparse
 import os
 import subprocess
+import spur
 
-VALID_FILES = {'main': 'node/main.go', 'server': 'server/server.go'}
+GO_ENV = {
+    'GOPATH': '/home/416/go',
+    'PATH': '$PATH:/usr/local/go/bin:$GOPATH/bin'
+}
 
-def run(fp):
-    """
-    Run a specific file once connecting to a VM
-    TODO: Finish drafting this
-    """
-    subprocess.run(['go', 'run', fp])
+FILES = {
+    'main': ['node/main.go', '20.36.31.108:12345'],
+    'server': ['server/server.go', '-c', 'server/config.json']
+}
 
 
-def ssh(ip, pw, debug):
+def get_ip(vm):
+    with open('vm-ips.txt') as f:
+        for l, v in enumerate(f):
+            if l == vm - 1:
+                return v.strip()
+
+
+def get_pw(vm):
+    with open('vm-pws.txt') as f:
+        for l, v in enumerate(f):
+            if l == vm - 1:
+                return v.strip()
+
+
+def handle_action(shell):
     """
-    Our Azure VMs do not have passwords
-    Only log in with SSH key
-    TODO: Finish drafting this
+    Executes user-input actions on VM
+
+    Valid actions:
+        exit, quit: terminate script
+        pull: git pull latest commit
+        run: go run file
+        clean: kill zombie processes
+        custom: have it your way
     """
-    if debug:
-        subprocess.run(['sshpass', '-p', pw, 'ssh', '-v', '-i', '~/.ssh/id_rsa', ip])
+    loop = True
+    action = input('What action would you like to do?\n')
+
+    if action == 'exit' or action == 'quit':
+        loop = False
+    elif action == 'pull':
+        # I'd like to have this functionality,
+        # but I can't leave my password in a shared repository
+        result = shell.run(['git', 'pull'],
+                            cwd='proj2_g4w8_g6y9a_i6y8_o5z8',
+                            encoding='utf-8')
+        print(result.output)
+    elif action == 'run':
+        fp = input('Which file would you like to run?\n')
+        args = ['go', 'run'] + FILES[fp]
+        result = shell.run(args,
+                            cwd='proj2_g4w8_g6y9a_i6y8_o5z8',
+                            update_env=GO_ENV,
+                            encoding='utf-8')
+        print(result.output)
+    elif action == 'clean':
+        # only for server so far
+        result = shell.run(['fuser', '12345/tcp'],
+                            encoding='utf-8')
+        print(result.output)
+        pid = result.output.strip()
+        result = shell.run(['kill', '-9', pid],
+                            encoding = 'utf-8')
+        print(result.output)
+    elif action == 'custom':
+        cmd = input('Enter your custom action\n')
+        result = shell.run(cmd.split(),
+                            encoding='utf-8')
+        print(result.output)
     else:
-        subprocess.run(['sshpass', '-p', pw, 'ssh', '-i', '~/.ssh/id_rsa', ip])
-    print('Finished SSHing')
+        print('Not a valid action; try again')
+    
+    return loop
 
 
 def main():
     """
-    Process command line arguments
-    TODO: Finish drafting this
+    Process command line arguments and run appropriate files
     """
-    parser = argparse.ArgumentParser(description='Project 2 demo script')
-    parser.add_argument('-v', '--vm', metavar='N', type=int,
-                        help='the index of the VM to SSH into')
-    parser.add_argument('-f', '--file', metavar='file', type=str,
-                        help='the name of the file to run')
-    parser.add_argument('-d', '--debug', action='store_true')
-    args = parser.parse_args()
+    print('CPSC 416 Project 2 General-Purpose Script\n')
 
-    if args.vm < 1 or args.vm > 10:
-        raise ValueError('VM must be from 1 to 10')
-    if args.file not in VALID_FILES:
-        raise ValueError('File must be one of %s' % VALID_FILES)
+    vm = int(input('Which VM would you like to connect to? (1 to 10)\n'))
     
-    ip = "416@"
+    ip = get_ip(vm)
+    pw = get_pw(vm)
 
-    with open('vm-ips.txt') as f:
-        for l, v in enumerate(f):
-            if l == args.vm - 1:
-                ip += v
+    print('Connecting to %s with password %s\n' % (ip, pw))
 
-    pw = ""
-
-    with open('vm-pws.txt') as f:
-        for l, v in enumerate(f):
-            if l == args.vm - 1:
-                pw = v
+    shell = spur.SshShell(username='416', hostname=ip, password=pw, connect_timeout=5)
+    shell.run(['echo', 'Verifying login'], encoding='utf-8')
     
-    fp = VALID_FILES[args.file]
+    print('Successfully connected\n')
 
-    ssh(ip, pw, args.debug)
-    # run(fp)
+    loop = True
+
+    while loop:
+        loop = handle_action(shell)
 
 
 if __name__ == '__main__':
