@@ -29,14 +29,19 @@ func ListenClusterRpc() {
 	server.Accept(tcp)
 }
 
-func (c ClusterRpc) Write(coords structs.Coords, response *string) error {
-	err := node.WriteFile(coords)
+func (c ClusterRpc) Write(write structs.WriteMsg, response *string) error {
+	// TODO: Do we need WriteMsg.Id?
+
+	err := node.WriteFile(write.Topic, write.Data)
+	// TODO: Call Propagate
 	return err	
 }
 
-func (c ClusterRpc) Read(req int, response *string) error {
-	data, err := node.ReadFile(req)
-	*response = data
+func (c ClusterRpc) Read(topic string, response *[]string) error {
+	// TODO: Do we need WriteMsg.Id?
+
+	topicData, err := node.ReadFile(topic)
+	*response = topicData
 	return err
 }
 
