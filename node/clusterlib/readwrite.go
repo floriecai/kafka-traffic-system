@@ -1,14 +1,15 @@
 package node
 
-import ("sync"
-		"fmt"
+import (
+	"fmt"
+	"sync"
 )
-
 
 // Use Sync map for concurrent read and write
 // Use a write lock so we can't have data changed between a load and store
 var fm *sync.Map
 var writeLock *sync.Mutex
+
 // key: Topic -- value: []string where the strings are data
 
 // FileSystem related errors //////
@@ -19,6 +20,7 @@ type FileSystemError struct {
 func (e FileSystemError) Error() string {
 	return fmt.Sprintf(e.Reason)
 }
+
 ////////////////////////////////////
 
 func MountFile() error {
