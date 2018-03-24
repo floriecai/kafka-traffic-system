@@ -16,6 +16,7 @@ type PeerRpc struct{
 
 }
 
+var ClusterRpcAddr, PeerRpcAddr string
 
 /*******************************
 | Cluster RPC Calls
@@ -25,7 +26,10 @@ func ListenClusterRpc() {
 	server := rpc.NewServer()
 	server.RegisterName("Cluster", cRpc)
 	tcp, _ := net.Listen("tcp", ":0")
+
+	ClustrRpcAddr = tcp.Addr().String()
 	fmt.Println("ClusterRpc is listening on: ", tcp.Addr().String())
+
 	server.Accept(tcp)
 }
 
@@ -53,18 +57,41 @@ func ListenPeerRpc() {
 	server := rpc.NewServer()
 	server.RegisterName("Peer", pRpc)
 	tcp, _ := net.Listen("tcp", ":0")
+
+	PeerRpcAddr = tcp.Addr().String()
 	fmt.Println("PeerRpc is listening on: ", tcp.Addr().String())
+
 	server.Accept(tcp)
 }
 
+// Server -> Node rpc that sets that node as a leader
+// When it returns the node will have been established as leader
+func (c PeerRpc) Lead(ips []string, _ignored string) error {
+	err := node.BecomeLeader(ips)
+	return err
+}
 
+// Leader -> Node rpc that sets the caller as this node's leader
+func (c PeerRpc) FollowMe(){
+	//TODO:
+}
+
+// Follower -> Leader rpc that is used to join this leader's cluster
+func (c PeerRpc) Follow(){
+	//TODO:
+}
+
+// Follower -> Follower rpc that is used by the caller to become a peer of this node
+func (c PeerRpc) Connect(){
+	//TODO:
+}
 /*******************************
 | Main
 ********************************/
 func main() {
 	serverIP := os.Args[1]
-	// Open Filesystem
-	node.MountFile()
+	// Open Filesystem on Disk
+	node.MountFiles()
 	// Open Cluster to App RPC
 	go ListenClusterRpc()
 	// Open Peer to Peer RPC
