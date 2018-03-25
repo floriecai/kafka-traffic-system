@@ -2,6 +2,7 @@ import os
 import subprocess
 import spur
 
+# Pass this to update_env, otherwise go run commands will not work
 GO_ENV = {
     'GOPATH': '/home/416/go',
     'PATH': '$PATH:/usr/local/go/bin:$GOPATH/bin'

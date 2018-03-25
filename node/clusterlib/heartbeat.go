@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+
+	"../../shared"
 )
 
 var serverclient *rpc.Client
@@ -18,6 +20,17 @@ func ConnectToServer(ip string) {
 		fmt.Println("Connecting to server on:", conn.LocalAddr().String())
 		serverclient = rpc.NewClient(conn)
 	}
+}
+
+// Not sure if this belongs here
+func Register(nodeAddr net.Addr) shared.NodeSettings {
+	reqArgs := shared.NodeInfo{Address: nodeAddr}
+	var resp shared.NodeSettings
+	err := serverclient.Call("TServer.Register", reqArgs, &resp)
+	if err != nil {
+		fmt.Println("Error registering Node to Server")
+	}
+	return resp
 }
 
 func ServerHeartBeat() {
