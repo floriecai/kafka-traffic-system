@@ -28,7 +28,7 @@ func Register(nodeAddr net.Addr) shared.NodeSettings {
 	var resp shared.NodeSettings
 	err := serverclient.Call("TServer.Register", reqArgs, &resp)
 	if err != nil {
-		fmt.Println("Error registering Node to Server")
+		fmt.Printf("Error in heartbeat::Register()\n%s", err)
 	}
 	return resp
 }

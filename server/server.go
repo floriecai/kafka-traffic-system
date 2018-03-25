@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -260,6 +261,8 @@ func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *shared.Node) (
 }
 
 func main() {
+	gob.Register(&net.TCPAddr{})
+
 	// Pass in IP as command line argument
 	// ip := os.Args[1] + ":0"
 
