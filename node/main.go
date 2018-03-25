@@ -101,12 +101,7 @@ func main() {
 	// Open Peer to Peer RPC
 	go ListenPeerRpc()
 	// Connect to the Server
-<<<<<<< HEAD
-	node.ConnectToServer(serverIP)
-}
-=======
 	node.ConnectToServer(serverIP);
 	// Open Cluster to App RPC
 	ListenClusterRpc()
 }
->>>>>>> 982173f3ba3035f1e232a66a0fd94bc868241475
