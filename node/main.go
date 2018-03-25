@@ -16,11 +16,8 @@ type ClusterRpc struct {
 type PeerRpc struct {
 }
 
-<<<<<<< HEAD
-=======
 var ClusterRpcAddr, PeerRpcAddr string
 
->>>>>>> 982173f3ba3035f1e232a66a0fd94bc868241475
 /*******************************
 | Cluster RPC Calls
 ********************************/
