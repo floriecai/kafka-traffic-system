@@ -202,8 +202,6 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				log.Fatalf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address.String())
 			}
 
-			var req structs.LeadRequest
-			var resp structs.LeadResponse
 			orphanIps := make([]string, 0)
 
 			orphanNodes.Lock()
@@ -216,8 +214,8 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				orphanIps = append(orphanIps, orphan.Address.String())
 			}
 
-			req.Followers = orphanIps
-			if err := node.Client.Call("Node.Lead", req, &resp); err != nil {
+			var ignore string
+			if err := node.Client.Call("PeerRpc.Lead", orphanIps, &ignore); err != nil {
 				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address.String())
 				return err
 			}

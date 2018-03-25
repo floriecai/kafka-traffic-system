@@ -26,13 +26,6 @@ type Topic struct {
 
 ////////////////////// RPC STRUCTS //////////////////////
 
-type LeadRequest struct {
-	Followers []string
-}
-
-type LeadResponse struct { // nothing for now
-}
-
 type AdditionalNodeRequest struct { // nothing for now
 }
 
