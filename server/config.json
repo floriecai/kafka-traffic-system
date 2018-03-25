@@ -3,5 +3,6 @@
     "node-settings": {
         "min-num-node-connections": 2,
         "heartbeat": 3000
-    }
+    },
+    "min-cluster-size": 3
 }

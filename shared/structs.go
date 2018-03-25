@@ -4,9 +4,6 @@ import (
 	"net"
 )
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// <DATA STRUCTURES>
-
 type GPSCoordinates struct {
 	Lat float32
 	Lon float32
@@ -28,13 +25,3 @@ type Node struct {
 	Coordinates GPSCoordinates
 	Peers       []Node
 }
-
-type Topic struct {
-	TopicName      string
-	MinReplicasNum uint32
-	Leaders        []Node
-	Followers      []Node
-}
-
-// </DATA STRUCTURES>
-/////////////////////////////////////////////////////////////////////////////////////////////////

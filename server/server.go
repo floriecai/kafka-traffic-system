@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"../shared"
+	"../structs"
+	c "./concurrentlib"
 )
 
 /////////////////////////////////////////////////////////
@@ -44,6 +45,12 @@ func (e TopicDoesNotExistError) Error() string {
 	return fmt.Sprintf("Server: Topic: [%s] does not exist", string(e))
 }
 
+type InsufficientNodesForCluster string
+
+func (e InsufficientNodesForCluster) Error() string {
+	return fmt.Sprintf("Server: There are not enough available nodes to form a topic's cluster")
+}
+
 /////////////////////////////////////////////////////////
 // END OF ERRORS
 /////////////////////////////////////////////////////////
@@ -53,32 +60,13 @@ func (e TopicDoesNotExistError) Error() string {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 type TServer struct {
-	// Node -> shared.Topic
-	NodeMap sync.Map
-	// TopicName -> shared.Topic
-	TopicMap       sync.Map
-	MinReplicasNum uint32
 	TopicsFileLock sync.Mutex
 }
 
-type NodeSettings struct {
-	MinNumNodeConnections uint8  `json:"min-num-node-connections"`
-	HeartBeat             uint32 `json:"heartbeat"`
-}
-
-type Node struct {
-	Address         net.Addr
-	RecentHeartbeat int64
-	IsLeader        bool
-}
-
-type NodeInfo struct {
-	Address net.Addr
-}
-
 type Config struct {
-	NodeSettings NodeSettings `json:"node-settings"`
-	RpcIpPort    string       `json:"rpc-ip-port"`
+	NodeSettings   structs.NodeSettings `json:"node-settings"`
+	RpcIpPort      string               `json:"rpc-ip-port"`
+	MinClusterSize uint32               `json:"min-cluster-size"`
 }
 
 const (
@@ -87,15 +75,19 @@ const (
 
 type AllNodes struct {
 	sync.RWMutex
-	all map[string]*Node // unique ip:port idenitifies a node
+	all map[string]*structs.Node // unique ip:port idenitifies a node
 }
 
 var (
-	tServer  *TServer
-	config   Config
-	allNodes AllNodes    = AllNodes{all: make(map[string]*Node)}
-	errLog   *log.Logger = log.New(os.Stderr, "[serv] ", log.Lshortfile|log.LUTC|log.Lmicroseconds)
-	outLog   *log.Logger = log.New(os.Stderr, "[serv] ", log.Lshortfile|log.LUTC|log.Lmicroseconds)
+	tServer *TServer
+	config  Config
+
+	allNodes    = AllNodes{all: make(map[string]*structs.Node)}
+	orphanNodes = c.Orphanage{Orphans: make([]structs.Node, 0)}
+	topics      = c.TopicCMap{Map: make(map[string]structs.Topic)}
+
+	errLog = log.New(os.Stderr, "[serv] ", log.Lshortfile|log.LUTC|log.Lmicroseconds)
+	outLog = log.New(os.Stderr, "[serv] ", log.Lshortfile|log.LUTC|log.Lmicroseconds)
 )
 
 func readConfigOrDie(path string) {
@@ -110,28 +102,43 @@ func readConfigOrDie(path string) {
 }
 
 // Register Nodes
-func (s *TServer) Register(n NodeInfo, nodeSettings *NodeSettings) error {
+func (s *TServer) Register(n net.Addr, nodeSettings *structs.NodeSettings) error {
 	allNodes.Lock()
 	defer allNodes.Unlock()
 
-	// if node, exists := allNodes.all[n.Address.String()]; exists {
-	// 	return AddressAlreadyRegisteredError(node.Address.String())
-	// }
-
 	for _, node := range allNodes.all {
-		if node.Address.Network() == n.Address.Network() &&
-			node.Address.String() == n.Address.String() {
-			return AddressAlreadyRegisteredError(n.Address.String())
+		if node.Address.Network() == n.Network() &&
+			node.Address.String() == n.String() {
+			return AddressAlreadyRegisteredError(n.String())
 		}
 	}
 
-	allNodes.all[n.Address.String()] = &Node{Address: n.Address}
+	outLog.Println("Register::Connecting to address: ", n.String())
+	localAddr, err := net.ResolveTCPAddr("tcp", ":0")
+	checkError(err, "GetPeers:ResolvePeerAddr")
 
-	go monitor(n.Address.String(), time.Duration(config.NodeSettings.HeartBeat))
+	nodeAddr, err := net.ResolveTCPAddr("tcp", n.String())
+	checkError(err, "GetPeers:ResolveLocalAddr")
+
+	conn, err := net.DialTCP("tcp", localAddr, nodeAddr)
+	checkError(err, "GetPeers:DialTCP")
+
+	client := rpc.NewClient(conn)
+
+	// Add to orphan nodes
+	orphanNodes.Append(structs.Node{
+		Address: n,
+		Client:  client})
+
+	allNodes.all[n.String()] = &structs.Node{
+		Address: n,
+		Client:  client}
+
+	go monitor(n.String(), time.Duration(config.NodeSettings.HeartBeat))
 
 	*nodeSettings = config.NodeSettings
 
-	outLog.Printf("Got Register from %s\n", n.Address.String())
+	outLog.Printf("Got Register from %s\n", n.String())
 
 	return nil
 }
@@ -139,7 +146,6 @@ func (s *TServer) Register(n NodeInfo, nodeSettings *NodeSettings) error {
 // Writes to disk any connections that have been made to the server along
 // with their corresponding topics (if any)
 func updateNodeMap(addr string, topicName string, server *TServer) error {
-	// server.NodeMap.Load()
 	_, err := os.OpenFile(topicFile, os.O_WRONLY, 0644)
 
 	if err == nil {
@@ -180,31 +186,64 @@ func (s *TServer) HeartBeat(addr *string, _ignored *bool) error {
 // Producer API RPC
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (s TServer) CreateTopic(topicName *string, topicReply *shared.Topic) error {
+func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
-	if _, ok := s.TopicMap.Load(*topicName); !ok {
-		// topic := new(shared.Topic)
+	if _, ok := topics.Get(*topicName); !ok {
+		if orphanNodes.Len >= config.MinClusterSize {
+			orphanNodes.Lock()
+			lNode := orphanNodes.Orphans[0]
+			orphanNodes.Unlock()
 
-		topic := shared.Topic{
-			TopicName:      *topicName,
-			MinReplicasNum: s.MinReplicasNum,
-			Leaders:        []shared.Node{},
-			Followers:      []shared.Node{}}
-		// TODO: Populate Leaders and Followers with actual Nodes
+			allNodes.Lock()
+			node, exists := allNodes.all[lNode.Address.String()]
+			allNodes.Unlock()
 
-		// s.TopicMap.Store(topic)
+			if !exists {
+				log.Fatalf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address.String())
+			}
 
-		*topicReply = topic
-		return nil
+			var req structs.LeadRequest
+			var resp structs.LeadResponse
+			orphanIps := make([]string, 0)
+
+			orphanNodes.Lock()
+			defer orphanNodes.Unlock()
+			for i, orphan := range orphanNodes.Orphans {
+				if i >= int(config.MinClusterSize) {
+					break
+				}
+
+				orphanIps = append(orphanIps, orphan.Address.String())
+			}
+
+			req.Followers = orphanIps
+			if err := node.Client.Call("Node.Lead", req, &resp); err != nil {
+				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address.String())
+				return err
+			}
+
+			droppedOrphans := orphanNodes.DropN(int(config.MinClusterSize))
+
+			topic := structs.Topic{
+				TopicName:   *topicName,
+				MinReplicas: config.NodeSettings.MinNumNodeConnections,
+				Leaders:     []structs.Node{lNode},
+				Followers:   droppedOrphans[1:]}
+
+			topics.Set(*topicName, topic)
+			*topicReply = topic
+			return nil
+		}
+
+		return InsufficientNodesForCluster("")
 	}
 
 	return DuplicateTopicNameError(*topicName)
-
 }
 
-func (s *TServer) GetTopic(topicName *string, topicReply *shared.Topic) error {
-	if topic, ok := s.TopicMap.Load(*topicName); ok {
-		*topicReply = topic.(shared.Topic)
+func (s *TServer) GetTopic(topicName *string, topicReply *structs.Topic) error {
+	if topic, ok := topics.Get(*topicName); ok {
+		*topicReply = topic
 		return nil
 	}
 
@@ -215,9 +254,9 @@ func (s *TServer) GetTopic(topicName *string, topicReply *shared.Topic) error {
 // Helpers for Leader promotion/demotion
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (s *TServer) AddTopicLeader(topicName *string, newLeader *shared.Node) (err error) {
+func (s *TServer) AddTopicLeader(topicName *string, newLeader *structs.Node) (err error) {
 	// topicI, ok := s.TopicMap.Load(topicName)
-	// topicI.(shared.)
+	// topicI.(structs.)
 	// if ok {
 	// 	topic.Leaders = append(topic.Leaders, newLeader)
 	// 	return nil
@@ -228,7 +267,7 @@ func (s *TServer) AddTopicLeader(topicName *string, newLeader *shared.Node) (err
 }
 
 // Does not preserve order
-func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *shared.Node) (err error) {
+func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *structs.Node) (err error) {
 	// topic, ok := s.TopicMap.Load(topicName)
 	// if ok {
 	// 	// Find index of oldLeader in topic.Leaders
@@ -258,9 +297,6 @@ func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *shared.Node) (
 }
 
 func main() {
-	// Pass in IP as command line argument
-	// ip := os.Args[1] + ":0"
-
 	path := flag.String("c", "", "Path to the JSON config")
 	flag.Parse()
 
@@ -284,7 +320,7 @@ func main() {
 	outLog.Printf("Server started. Receiving on %s\n", config.RpcIpPort)
 
 	if err != nil {
-		fmt.Sprintf("Server: Error initializing RPC Listener")
+		fmt.Sprintln("Server: Error initializing RPC Listener")
 		return
 	}
 
@@ -298,4 +334,12 @@ func handleErrorFatal(msg string, e error) {
 	if e != nil {
 		errLog.Fatalf("%s, err = %s\n", msg, e.Error())
 	}
+}
+
+func checkError(err error, parent string) bool {
+	if err != nil {
+		errLog.Println(parent, ":: found error! ", err)
+		return true
+	}
+	return false
 }

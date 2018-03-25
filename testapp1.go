@@ -1,8 +1,9 @@
 package main
 
 import (
-	"./movement"
 	"fmt"
+
+	"./movement"
 )
 
 func main() {
