@@ -49,7 +49,9 @@ func ListenPeerRpc() {
 // Code from https://gist.github.com/jniltinho/9787946
 func GeneratePublicIP() string {
 	addrs, err := net.InterfaceAddrs()
-	CheckError(err, "GeneratePublicIP")
+	if err != nil {
+		fmt.Println("Error generating public IP")
+	}
 
 	for _, a := range addrs {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
@@ -62,7 +64,7 @@ func GeneratePublicIP() string {
 	return "Could not find IP"
 }
 
-func ManageConnections(pop chan string) {
+func ManageConnections() {
 	interval := time.Duration(NodeInstace.Settings.HeartBeat / 5)
 	heartbeat := time.Tick(interval * time.Millisecond)
 	count := 0
@@ -96,7 +98,7 @@ func main() {
 	// dummy values
 	coords := shared.GPSCoordinates{Lat: 0.0, Lon: 0.0}
 	NodeInstance.Coordinates = coords
-	NodeInstance.Peers = []
+	NodeInstance.Peers = []shared.Node
 
 	// Connect to the Server
 	node.ConnectToServer(serverIP)
@@ -105,6 +107,5 @@ func main() {
 	fmt.Printf("%+v\n", NodeInstance)
 
 	// Channels
-	pop = make(chan , 1024)
 	go ManageConnections()
 }
