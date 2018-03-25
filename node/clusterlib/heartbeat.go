@@ -6,9 +6,9 @@ import (
 	"net/rpc"
 )
 
-var serverclient *rpc.Client;
+var serverclient *rpc.Client
 
-func ConnectToServer(ip string){
+func ConnectToServer(ip string) {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
 	ServerAddr, _ := net.ResolveTCPAddr("tcp", ip)
 	conn, err := net.DialTCP("tcp", LocalAddr, ServerAddr)
@@ -20,7 +20,7 @@ func ConnectToServer(ip string){
 	}
 }
 
-func ServerHeartBeat(){
+func ServerHeartBeat() {
 	var _ignored bool
-	serverclient.Call("Server.HeartBeat", &_ignored, &_ignored)
+	serverclient.Call("TServer.HeartBeat", &_ignored, &_ignored)
 }
