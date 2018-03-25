@@ -23,7 +23,7 @@ func (e FileSystemError) Error() string {
 
 ////////////////////////////////////
 
-func MountFile() error {
+func MountFiles() error {
 	fm = new(sync.Map)
 	writeLock = &sync.Mutex{}
 	// TODO: Make fault tolerant by reading files from drive
