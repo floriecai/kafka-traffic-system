@@ -1,12 +1,13 @@
 package main
 
 import (
-	"time"
 	"fmt"
 	"net"
 	"net/rpc"
 	"os"
+	"time"
 
+	"../shared"
 	"./clusterlib"
 )
 
@@ -65,15 +66,15 @@ func GeneratePublicIP() string {
 }
 
 func ManageConnections() {
-	interval := time.Duration(NodeInstace.Settings.HeartBeat / 5)
+	interval := time.Duration(NodeInstance.Settings.HeartBeat / 5)
 	heartbeat := time.Tick(interval * time.Millisecond)
-	count := 0
+	// count := 0
 
 	for {
 		select {
-			case <- heartbeat:
-				node.ServerHeartBeat()
-			}
+		case <-heartbeat:
+			node.ServerHeartBeat()
+		}
 	}
 }
 
@@ -88,9 +89,9 @@ func main() {
 	go ListenPeerRpc()
 
 	// Set up node
-	NodeInstance = new(shared.Node)
+	NodeInstance := new(shared.Node)
 	NodeInstance.Type = 1
-	publicIP = GeneratePublicIP()
+	publicIP := GeneratePublicIP()
 	fmt.Println(publicIP)
 	ln, _ := net.Listen("tcp", publicIP)
 	addr := ln.Addr()
@@ -98,7 +99,7 @@ func main() {
 	// dummy values
 	coords := shared.GPSCoordinates{Lat: 0.0, Lon: 0.0}
 	NodeInstance.Coordinates = coords
-	NodeInstance.Peers = []shared.Node
+	NodeInstance.Peers = []shared.Node{}
 
 	// Connect to the Server
 	node.ConnectToServer(serverIP)
