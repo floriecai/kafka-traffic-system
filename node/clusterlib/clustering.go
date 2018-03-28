@@ -1,10 +1,14 @@
 package node
 
-
-import ("sync"
-		"net/rpc"
-		"net"
+import (
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/rpc"
+	"sync"
 )
+
 type Mode int
 
 const (
@@ -16,7 +20,7 @@ var NodeMode Mode = Follower
 
 var PeerMap *sync.Map
 
-var DirectFollowersList []string
+var DirectFollowersList map[string]bool // ip -> true
 
 var LeaderConn *rpc.Client
 
@@ -54,7 +58,11 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 }
 
 func FollowLeader(msg FollowMeMsg) (err error) {
-	DirectFollowersList = msg.FollowerIps
+	DirectFollowersList = make(map[string]bool)
+
+	for _, ip := range msg.FollowerIps {
+		DirectFollowersList[ip] = true
+	}
 
 	LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
@@ -73,4 +81,50 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 
 	LeaderConn = rpc.NewClient(conn)
 	return err
+}
+
+func ModifyFollowerList(ips []string, add bool) error {
+	if add {
+		for _, ip := range ips {
+			if DirectFollowersList[ip] {
+				log.Println(errors.New("Clustering: Follower is already known"))
+			} else {
+				DirectFollowersList[ip] = true
+			}
+		}
+	} else {
+		for _, ip := range ips {
+			if !DirectFollowersList[ip] {
+				log.Println(errors.New("Clustering: Follower is not known. Cannot remove follower"))
+			} else {
+				delete(DirectFollowersList, ip)
+			}
+		}
+	}
+
+	return nil
+}
+
+// Code from https://gist.github.com/jniltinho/9787946
+func GeneratePublicIP() string {
+	addrs, err := net.InterfaceAddrs()
+	checkError(err, "GeneratePublicIP")
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String() + ":"
+			}
+		}
+	}
+
+	return "Could not find IP"
+}
+
+func checkError(err error, parent string) bool {
+	if err != nil {
+		fmt.Println(parent, ":: found error! ", err)
+		return true
+	}
+	return false
 }

@@ -6,7 +6,7 @@ import (
 	"net/rpc"
 )
 
-var serverclient *rpc.Client
+var ServerClient *rpc.Client
 
 func ConnectToServer(ip string) {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
@@ -16,11 +16,11 @@ func ConnectToServer(ip string) {
 		fmt.Println("Could not connect to server")
 	} else {
 		fmt.Println("Connecting to server on:", conn.LocalAddr().String())
-		serverclient = rpc.NewClient(conn)
+		ServerClient = rpc.NewClient(conn)
 	}
 }
 
 func ServerHeartBeat() {
 	var _ignored bool
-	serverclient.Call("TServer.HeartBeat", &_ignored, &_ignored)
+	ServerClient.Call("TServer.HeartBeat", &_ignored, &_ignored)
 }
