@@ -38,7 +38,7 @@ var electionNumRequired int
 var electionNumAccepted int
 var electionLock sync.Mutex
 var electionComplete bool = false
-var electionCompleteCond sync.Cond
+var electionUpdateCond sync.Cond
 var chosenLeaderId string
 var chosenLeaderLatestNum int
 var nominationCompleteCh chan bool = make(chan bool, 1)
@@ -118,9 +118,9 @@ func StartElection(myLatestNum int, myId string, numAcceptRequired int) {
 		// created.
 		time.Sleep(ELECTION_COMPLETE_TIMEOUT)
 
-		electionCompleteCond.L.Lock()
+		electionUpdateCond.L.Lock()
 		electionComplete = true
-		electionCompleteCond.L.Unlock()
+		electionUpdateCond.L.Unlock()
 
 		if thisNodeId == chosenLeaderId {
 			// This sleep is to ensure that there is enough time after
@@ -144,13 +144,12 @@ func StartElection(myLatestNum int, myId string, numAcceptRequired int) {
 	}()
 }
 
-// Function CheckIfAcceptPeer should be called when a peer self-nomination is
+// Function CheckPeerNominateAccept should be called when a peer self-nomination is
 // received. This function will return true if it consents for that peer to be
 // the leader, and false otherwise
 func CheckPeerNominateAccept(peerLatestNum int, peerId string) bool {
 	electionLock.Lock()
 
-	// reject immediately if no good
 	// wait for accept if peerLatestNum is greatest - there could be
 	// another one yet to arrive that is greater.
 	// - condvar, and select on timeout
@@ -165,16 +164,23 @@ func CheckPeerNominateAccept(peerLatestNum int, peerId string) bool {
 		}
 	}
 
-	// If reached here, the peerId is now the chosen leader for now.
+	// If reached here, the peerId is the chosen leader for now.
 	chosenLeaderLatestNum = peerLatestNum
 	chosenLeaderId = peerId
 	electionLock.Unlock()
 
-	electionCompleteCond.L.Lock()
-	if !electionComplete {
-		electionCompleteCond.Wait()
+	electionUpdateCond.L.Lock()
+
+	for !electionComplete {
+		electionUpdateCond.Wait()
+
+		if peerId != chosenLeaderId {
+			electionUpdateCond.L.Unlock()
+			return false
+		}
 	}
-	electionCompleteCond.L.Unlock()
+
+	electionUpdateCond.L.Unlock()
 
 	// check if chosenLeaderId is still peerId, and return the result
 	return (peerId == chosenLeaderId)
