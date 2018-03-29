@@ -116,6 +116,11 @@ func peerHbSender(id string, peerConn *rpc.Client) {
 			ch <- "die"
 			return
 		case <-call.Done:
+			if call.Error != nil {
+				ch <- "die"
+				return
+			}
+
 			// Wait until timeout is done so that full interval has passed
 			// before sending again.
 			<-timeout
@@ -126,7 +131,7 @@ func peerHbSender(id string, peerConn *rpc.Client) {
 
 // Handles heartbeat timeout checking for peers. Note that there is a check for
 // both sending and receiving heartbeats from a peer. Seems unlikely, but there
-// could be a case where a peer is taking  heartbeats just fine, but is not
+// could be a case where a peer is taking heartbeats just fine, but is not
 // sending any back.
 func peerHbHandler(id string) {
 	// Sanity checks - shouldn't ever happen
@@ -151,11 +156,11 @@ func peerHbHandler(id string) {
 
 		select {
 		case <-timeout:
-			return // client failure
+			return // peer failure
 		case msg := <-ch:
 			switch msg {
 			case "die":
-				return
+				return // peer failure detected by another method
 			case "hb":
 				continue
 			}
@@ -170,7 +175,6 @@ func getPeer(id string) (peer *Peer, ok bool) {
 	if !ok {
 		return nil, false
 	}
-
 	p, ok := val.(Peer)
 	if !ok {
 		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
