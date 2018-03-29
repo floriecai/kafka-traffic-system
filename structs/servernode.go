@@ -1,7 +1,7 @@
 package structs
 
 import (
-	"net"
+	//"net"
 	"net/rpc"
 )
 
@@ -11,7 +11,7 @@ type NodeSettings struct {
 }
 
 type Node struct {
-	Address         net.Addr
+	Address         string
 	Client          *rpc.Client
 	RecentHeartbeat int64
 	IsLeader        bool

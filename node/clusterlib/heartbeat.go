@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
-
-	"../../shared"
+	"time"
+	"../../structs"
 )
 
 var ServerClient *rpc.Client
-var MinConnections int
-var HBInterval int
+var MinConnections uint8
+var HBInterval uint32
 
 func ConnectToServer(ip string) {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
@@ -25,31 +25,25 @@ func ConnectToServer(ip string) {
 }
 
 // Not sure if this belongs here
-func Register(nodeAddr net.Addr) {	
+func ServerRegister(addr string) {	
 	var resp structs.NodeSettings
-	err := serverclient.Call("TServer.Register", nodeAddr, &resp)
+	err := ServerClient.Call("TServer.Register", addr, &resp)
 	if err != nil {
 		fmt.Printf("Error in heartbeat::Register()\n%s", err)
 	}
-	MinConnections = int(resp.MinNumNodeConnections)
-	HeartBeatInterval = int(resp.HeartBeat)
+	MinConnections = resp.MinNumNodeConnections
+	HBInterval = resp.HeartBeat
 }
 
-func ServerHeartBeat() {
+func ServerHeartBeat(addr string) {
 	var _ignored bool
-	ServerClient.Call("TServer.HeartBeat", &_ignored, &_ignored)
-}
-
-
-func HeartBeatManager() {
-	interval := time.Duration(NodeInstance.Settings.HeartBeat / 2)
+	fmt.Printf("starting server hb of: %d\n", HBInterval)
+	interval := time.Duration(HBInterval / 2)
 	heartbeat := time.Tick(interval * time.Millisecond)
-	// count := 0
-
 	for {
 		select {
-		case <-heartbeat:
-			node.ServerHeartBeat()
+		case <- heartbeat:
+			ServerClient.Call("TServer.HeartBeat", addr, &_ignored)
 		}
 	}
 }

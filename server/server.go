@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/gob"
+	//"encoding/gob"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 	"../structs"
-	"./concurrentlib"
+	c "./concurrentlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -101,22 +101,21 @@ func readConfigOrDie(path string) {
 }
 
 // Register Nodes
-func (s *TServer) Register(n net.Addr, nodeSettings *structs.NodeSettings) error {
+func (s *TServer) Register(n string, nodeSettings *structs.NodeSettings) error {
 	allNodes.Lock()
 	defer allNodes.Unlock()
 
 	for _, node := range allNodes.all {
-		if node.Address.Network() == n.Network() &&
-			node.Address.String() == n.String() {
-			return AddressAlreadyRegisteredError(n.String())
+		if node.Address == n {
+			return AddressAlreadyRegisteredError(n)
 		}
 	}
 
-	outLog.Println("Register::Connecting to address: ", n.String())
+	outLog.Println("Register::Connecting to address: ", n)
 	localAddr, err := net.ResolveTCPAddr("tcp", ":0")
 	checkError(err, "GetPeers:ResolvePeerAddr")
 
-	nodeAddr, err := net.ResolveTCPAddr("tcp", n.String())
+	nodeAddr, err := net.ResolveTCPAddr("tcp", n)
 	checkError(err, "GetPeers:ResolveLocalAddr")
 
 	conn, err := net.DialTCP("tcp", localAddr, nodeAddr)
@@ -129,15 +128,16 @@ func (s *TServer) Register(n net.Addr, nodeSettings *structs.NodeSettings) error
 		Address: n,
 		Client:  client})
 
-	allNodes.all[n.String()] = &structs.Node{
+	allNodes.all[n] = &structs.Node{
 		Address: n,
-		Client:  client}
+		Client:  client,
+		RecentHeartbeat: time.Now().UnixNano()}
 
-	go monitor(n.String(), time.Duration(config.NodeSettings.HeartBeat))
+	go monitor(n, time.Duration(config.NodeSettings.HeartBeat))
 
 	*nodeSettings = config.NodeSettings
 
-	outLog.Printf("Got Register from %s\n", n.String())
+	outLog.Printf("Got Register from %s\n", n)
 
 	return nil
 }
@@ -156,29 +156,29 @@ func updateNodeMap(addr string, topicName string, server *TServer) error {
 }
 
 func monitor(k string, heartBeatInterval time.Duration) {
+	time.Sleep(time.Second * 10)
 	for {
 		allNodes.Lock()
 		if time.Now().UnixNano()-allNodes.all[k].RecentHeartbeat > int64(heartBeatInterval) {
-			outLog.Printf("%s timed out\n", allNodes.all[k].Address.String())
+			outLog.Printf("%s timed out\n", allNodes.all[k].Address)
 			delete(allNodes.all, k)
 			allNodes.Unlock()
 			return
 		}
-		outLog.Printf("%s is alive\n", allNodes.all[k].Address.String())
+		outLog.Printf("%s is alive\n", allNodes.all[k].Address)
 		allNodes.Unlock()
 		time.Sleep(heartBeatInterval)
 	}
 }
 
-func (s *TServer) HeartBeat(addr *string, _ignored *bool) error {
+func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 	allNodes.Lock()
 	defer allNodes.Unlock()
-
-	if _, ok := allNodes.all[*addr]; !ok {
-		return UnknownNodeError(*addr)
+	if _, ok := allNodes.all[addr]; !ok {
+		return UnknownNodeError(addr)
 	}
 
-	allNodes.all[*addr].RecentHeartbeat = time.Now().UnixNano()
+	allNodes.all[addr].RecentHeartbeat = time.Now().UnixNano()
 
 	return nil
 }
@@ -196,11 +196,11 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 			orphanNodes.Unlock()
 
 			allNodes.Lock()
-			node, exists := allNodes.all[lNode.Address.String()]
+			node, exists := allNodes.all[lNode.Address]
 			allNodes.Unlock()
 
 			if !exists {
-				log.Fatalf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address.String())
+				log.Fatalf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
 			}
 
 			orphanIps := make([]string, 0)
@@ -212,12 +212,12 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 					break
 				}
 
-				orphanIps = append(orphanIps, orphan.Address.String())
+				orphanIps = append(orphanIps, orphan.Address)
 			}
 
 			var ignore string
 			if err := node.Client.Call("PeerRpc.Lead", orphanIps, &ignore); err != nil {
-				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address.String())
+				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
 				return err
 			}
 
@@ -296,7 +296,7 @@ func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *structs.Node) 
 }
 
 func main() { 
-	gob.Register(&net.TCPAddr{})
+	//gob.Register(&net.TCPAddr{})
  
  	// Pass in IP as command line argument
 	// ip := os.Args[1] + ":0"

@@ -23,16 +23,14 @@ var FollowerMap map[string]*rpc.Client // ipAddr -> rpcClient
 /*******************************
 | Cluster RPC Calls
 ********************************/
-func ListenClusterRpc() {
+func ListenClusterRpc(ln net.Listener) {
 	cRpc := new(ClusterRpc)
 	server := rpc.NewServer()
 	server.RegisterName("Cluster", cRpc)
-	tcp, _ := net.Listen("tcp", ":0")
+	ClusterRpcAddr = ln.Addr().String()
+	fmt.Println("ClusterRpc is listening on: ", ClusterRpcAddr)
 
-	ClusterRpcAddr = tcp.Addr().String()
-	fmt.Println("ClusterRpc is listening on: ", tcp.Addr().String())
-
-	server.Accept(tcp)
+	server.Accept(ln)
 }
 
 func (c ClusterRpc) Write(write structs.WriteMsg, response *string) error {
@@ -54,16 +52,14 @@ func (c ClusterRpc) Read(topic string, response *[]string) error {
 /*******************************
 | Peer RPC Calls
 ********************************/
-func ListenPeerRpc() {
+func ListenPeerRpc(ln net.Listener) {
 	pRpc := new(PeerRpc)
 	server := rpc.NewServer()
 	server.RegisterName("Peer", pRpc)
-	tcp, _ := net.Listen("tcp", ":0")
+	PeerRpcAddr = ln.Addr().String()
+	fmt.Println("PeerRpc is listening on: ", PeerRpcAddr)
 
-	PeerRpcAddr = tcp.Addr().String()
-	fmt.Println("PeerRpc is listening on: ", tcp.Addr().String())
-
-	server.Accept(tcp)
+	server.Accept(ln)
 }
 
 // Server -> Node rpc that sets that node as a leader
@@ -130,14 +126,24 @@ func main() {
 
 	// Initiate data structures
 	FollowerMap = make(map[string]*rpc.Client)
+
 	PublicIp = node.GeneratePublicIP()
+	fmt.Println("The public IP is:", PublicIp)
+	// Listener for clients -> cluster
+	ln1, _ := net.Listen("tcp", PublicIp + "0")
+
+	// Listener for server and other nodes
+	ln2, _ := net.Listen("tcp", PublicIp + "0")
 
 	// Open Filesystem on Disk
 	node.MountFiles()
 	// Open Peer to Peer RPC
-	go ListenPeerRpc()
+	go ListenPeerRpc(ln2)
 	// Connect to the Server
 	node.ConnectToServer(serverIP)
+	node.ServerRegister(PeerRpcAddr)
+	// Start Server Heartbeat
+	go node.ServerHeartBeat(PeerRpcAddr)
 	// Open Cluster to App RPC
-	ListenClusterRpc()
+	ListenClusterRpc(ln1)
 }
