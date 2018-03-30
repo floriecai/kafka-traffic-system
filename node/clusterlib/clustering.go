@@ -11,6 +11,14 @@ import (
 
 type Mode int
 
+type Peer struct {
+	HbChan   chan string
+	PeerConn *rpc.Client
+	DeathFn  func()
+}
+
+const LEADER_ID = "leader"
+
 const (
 	Follower Mode = iota
 	Leader
@@ -46,13 +54,20 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		client := rpc.NewClient(conn)
 
 		var _ignored string
+		fmt.Printf("Telling node with ip %s to follow me\n", ip)
 		err = client.Call("Peer.FollowMe", LeaderAddr, &_ignored)
 		if err != nil {
 			continue
 		}
 
-		PeerMap.Store(ip, client)
+		var deathFn = func() {
+			// This is the death function in the case that this peer
+			// dies. There will be more functionality added to this
+			// later for sure. Maybe put into separate function.
+			fmt.Printf("Oh no, my follower %s died!\n", ip)
+		}
 
+		addPeer(ip, client, deathFn)
 	}
 	return err
 }
@@ -74,12 +89,29 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 		return err
 	}
 
+	fmt.Printf("I am following the leader with ip msg.LeaderIp now\n")
+
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {
 		return err
 	}
 
+	// This is the death function in the case that the leader dies. There
+	// will be more functionality added to this later for sure. Maybe put
+	// into its own function rather than a variable.
+	var deathFn = func() {
+		fmt.Println("Oh no, the leader died!")
+	}
+
+	// check if there is already a leader connection; if so, kill it.
+	oldLeader, ok := getPeer(LEADER_ID)
+	if ok {
+		oldLeader.HbChan <- "die"
+	}
+
 	LeaderConn = rpc.NewClient(conn)
+	addPeer(LEADER_ID, LeaderConn, deathFn)
+
 	return err
 }
 
@@ -127,4 +159,30 @@ func checkError(err error, parent string) bool {
 		return true
 	}
 	return false
+}
+
+// Adds a peer to the map and starts a heartbeat checking procedure for it.
+func addPeer(id string, peerConn *rpc.Client, deathFn func()) {
+	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
+	PeerMap.Store(id, newPeer)
+
+	go peerHbSender(id)
+	go peerHbHandler(id)
+}
+
+// Retrieve a peer from sync.Map - does the checking. ok will say whether
+// or not a peer was successfully retrieved.
+func getPeer(id string) (peer *Peer, ok bool) {
+	// Check if peer in the map and do type assertion
+	val, ok := PeerMap.Load(id)
+	if !ok {
+		return nil, false
+	}
+	p, ok := val.(Peer)
+	if !ok {
+		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
+		return nil, false
+	}
+
+	return &p, true
 }

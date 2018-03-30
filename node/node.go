@@ -118,6 +118,11 @@ func (c PeerRpc) Connect(_ignored1 string, _ignored2 *string) error {
 	return nil
 }
 
+// Node -> Node RPC that is used to notify of liveliness
+func (c PeerRpc) Heartbeat(ip string, reply *string) error {
+	return node.PeerHeartbeat(ip, reply)
+}
+
 /*******************************
 | Main
 ********************************/
@@ -130,10 +135,10 @@ func main() {
 	PublicIp = node.GeneratePublicIP()
 	fmt.Println("The public IP is:", PublicIp)
 	// Listener for clients -> cluster
-	ln1, _ := net.Listen("tcp", PublicIp + "0")
+	ln1, _ := net.Listen("tcp", PublicIp+"0")
 
 	// Listener for server and other nodes
-	ln2, _ := net.Listen("tcp", PublicIp + "0")
+	ln2, _ := net.Listen("tcp", PublicIp+"0")
 
 	// Open Filesystem on Disk
 	node.MountFiles()

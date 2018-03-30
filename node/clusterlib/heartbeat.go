@@ -5,14 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
-	"sync"
 	"time"
 )
 
 type TODO struct{}
-type Peer struct {
-	Chan chan string
-}
 
 const HBTIMEOUT = 4
 const HBINTERVAL = 2
@@ -20,7 +16,6 @@ const HBINTERVAL = 2
 var ServerClient *rpc.Client
 var MinConnections uint8
 var HBInterval uint32
-var Peers sync.Map
 
 func ConnectToServer(ip string) {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
@@ -58,39 +53,27 @@ func ServerHeartBeat(addr string) {
 	}
 }
 
-// Heartbeat RPC for letting this node know that other guy is alive still
-func (s *TODO) Heartbeat(id *string, reply *string) error {
+// Logic of the heartbeat function
+func PeerHeartbeat(id string, reply *string) error {
 	*reply = "ok"
 
-	// Check if peer is in map
-	peer, ok := getPeer(*id)
+	// Check if peer is in map, then write to its heartbeat channel
+	peer, ok := getPeer(id)
 	if !ok {
 		*reply = "Disconnected error"
 		return fmt.Errorf("%s", *reply)
 	}
-
-	// Write to channel. Channel should not be nil.
-	if peer.Chan != nil {
-		peer.Chan <- "hb"
-	} else {
-		*reply = "CRITICAL ERROR - CHANNEL DNE"
-		return fmt.Errorf("%s", *reply)
-	}
+	peer.HbChan <- "hb"
 
 	return nil
 }
 
 // Handles periodic sending of heartbeats to a single peer. The RPC connection
 // should already be established, and the peer's channel should already be put
-// into the Peers map structure.
-func peerHbSender(id string, peerConn *rpc.Client) {
+// into the PeerMap structure.
+func peerHbSender(id string) {
 	peer, ok := getPeer(id)
 	if !ok {
-		return
-	}
-
-	ch := peer.Chan
-	if ch == nil {
 		return
 	}
 
@@ -103,21 +86,21 @@ func peerHbSender(id string, peerConn *rpc.Client) {
 		arg := id
 		var reply string
 
-		call := peerConn.Go("Peer.Heartbeat", &arg, &reply, nil)
+		call := peer.PeerConn.Go("Peer.Heartbeat", &arg, &reply, nil)
 		if call == nil {
 			// connection is dead - error
-			ch <- "die"
+			peer.HbChan <- "die"
 			return
 		}
 
 		select {
 		case <-timeout:
 			// timeout occurs before call returns - error
-			ch <- "die"
+			peer.HbChan <- "die"
 			return
 		case <-call.Done:
 			if call.Error != nil {
-				ch <- "die"
+				peer.HbChan <- "die"
 				return
 			}
 
@@ -139,28 +122,32 @@ func peerHbHandler(id string) {
 	if !ok {
 		return
 	}
-	ch := peer.Chan
-	if ch == nil {
-		return
-	}
 
-	// Cleanup routine for this long running function
+	// Cleanup routine for this long running function. There is more than
+	// one exit point in the loop  so defer this exit function. This is the
+	// single point of deletion for a peer connection.
 	defer func() {
 		// Delete peer from the map - can't talk to this guy anymore.
-		Peers.Delete(id)
+		PeerMap.Delete(id)
+		peer.PeerConn.Close()
+
+		fmt.Printf("Peer %s connection has died!", id)
+		peer.DeathFn()
 	}()
 
-	// main loop of the heartbeat checking
+	// Heartbeat checking loop - does not exit until a peer disconnects
 	for true {
 		timeout := createTimeout(HBTIMEOUT)
 
 		select {
 		case <-timeout:
-			return // peer failure
-		case msg := <-ch:
+			// Peer failure detected!
+			return
+		case msg := <-peer.HbChan:
 			switch msg {
 			case "die":
-				return // peer failure detected by another method
+				// Peer failure by another function, exit
+				return
 			case "hb":
 				continue
 			}
@@ -168,29 +155,12 @@ func peerHbHandler(id string) {
 	}
 }
 
-// Retrieve a peer from sync.Map - does the checking
-func getPeer(id string) (peer *Peer, ok bool) {
-	// Check if peer in the map and do type assertion
-	val, ok := Peers.Load(id)
-	if !ok {
-		return nil, false
-	}
-	p, ok := val.(Peer)
-	if !ok {
-		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
-		return nil, false
-	}
-
-	return &p, true
-}
-
 // Starts a goroutine that will write to the returned channel in <secs> seconds.
-func createTimeout(secs time.Duration) chan bool {
-	timeout := make(chan bool, 1)
+func createTimeout(secs time.Duration) (timeout chan bool) {
+	timeout = make(chan bool, 1)
 	go func() {
 		time.Sleep(secs * time.Second)
 		timeout <- true
 	}()
-
 	return timeout
 }
