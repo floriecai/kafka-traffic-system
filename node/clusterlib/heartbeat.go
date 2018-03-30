@@ -86,7 +86,7 @@ func peerHbSender(id string) {
 		arg := id
 		var reply string
 
-		call := peer.PeerConn.Go("Peer.Heartbeat", &arg, &reply, nil)
+		call := peer.PeerConn.Go("Peer.Heartbeat", arg, &reply, nil)
 		if call == nil {
 			// connection is dead - error
 			peer.HbChan <- "die"
@@ -100,6 +100,7 @@ func peerHbSender(id string) {
 			return
 		case <-call.Done:
 			if call.Error != nil {
+				fmt.Printf("Peer.Heartbeat error: %s\n", reply)
 				peer.HbChan <- "die"
 				return
 			}
