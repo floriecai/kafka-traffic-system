@@ -2,6 +2,8 @@ package main
 
 import (
 	//"encoding/gob"
+	"../structs"
+	c "./concurrentlib"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,8 +15,6 @@ import (
 	"os"
 	"sync"
 	"time"
-	"../structs"
-	c "./concurrentlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,11 +129,11 @@ func (s *TServer) Register(n string, nodeSettings *structs.NodeSettings) error {
 		Client:  client})
 
 	allNodes.all[n] = &structs.Node{
-		Address: n,
-		Client:  client,
+		Address:         n,
+		Client:          client,
 		RecentHeartbeat: time.Now().UnixNano()}
 
-	go monitor(n, time.Duration(config.NodeSettings.HeartBeat))
+	go monitor(n, time.Millisecond*time.Duration(config.NodeSettings.HeartBeat))
 
 	*nodeSettings = config.NodeSettings
 
@@ -295,10 +295,10 @@ func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *structs.Node) 
 	return nil
 }
 
-func main() { 
+func main() {
 	//gob.Register(&net.TCPAddr{})
- 
- 	// Pass in IP as command line argument
+
+	// Pass in IP as command line argument
 	// ip := os.Args[1] + ":0"
 	path := flag.String("c", "", "Path to the JSON config")
 	flag.Parse()
