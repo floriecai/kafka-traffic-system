@@ -30,7 +30,7 @@ func ListenClusterRpc(ln net.Listener) {
 	ClusterRpcAddr = ln.Addr().String()
 	fmt.Println("ClusterRpc is listening on: ", ClusterRpcAddr)
 
-	go server.Accept(ln)
+	server.Accept(ln)
 }
 
 func (c ClusterRpc) Write(write structs.WriteMsg, response *string) error {
@@ -59,7 +59,7 @@ func ListenPeerRpc(ln net.Listener) {
 	PeerRpcAddr = ln.Addr().String()
 	fmt.Println("PeerRpc is listening on: ", PeerRpcAddr)
 
-	server.Accept(ln)
+	go server.Accept(ln)
 }
 
 // Server -> Node rpc that sets that node as a leader
