@@ -59,7 +59,7 @@ func ListenPeerRpc(ln net.Listener) {
 	PeerRpcAddr = ln.Addr().String()
 	fmt.Println("PeerRpc is listening on: ", PeerRpcAddr)
 
-	server.Accept(ln)
+	go server.Accept(ln)
 }
 
 // Server -> Node rpc that sets that node as a leader
@@ -143,7 +143,7 @@ func main() {
 	// Open Filesystem on Disk
 	node.MountFiles()
 	// Open Peer to Peer RPC
-	go ListenPeerRpc(ln2)
+	ListenPeerRpc(ln2)
 	// Connect to the Server
 	node.ConnectToServer(serverIP)
 	node.ServerRegister(PeerRpcAddr)
