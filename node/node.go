@@ -30,7 +30,7 @@ func ListenClusterRpc(ln net.Listener) {
 	ClusterRpcAddr = ln.Addr().String()
 	fmt.Println("ClusterRpc is listening on: ", ClusterRpcAddr)
 
-	server.Accept(ln)
+	go server.Accept(ln)
 }
 
 func (c ClusterRpc) Write(write structs.WriteMsg, response *string) error {
@@ -143,7 +143,7 @@ func main() {
 	// Open Filesystem on Disk
 	node.MountFiles()
 	// Open Peer to Peer RPC
-	go ListenPeerRpc(ln2)
+	ListenPeerRpc(ln2)
 	// Connect to the Server
 	node.ConnectToServer(serverIP)
 	node.ServerRegister(PeerRpcAddr)
