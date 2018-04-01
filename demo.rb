@@ -60,7 +60,7 @@ end
 
 # GO
 def go_run_server(ip, pw)
-	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+	Net::SSH.start(ip, @USERNAME, password: pw) do |ssh|
 		puts "Running server"
 		ssh.exec!("source ~/.profile && cd proj2_g4w8_g6y9a_i6y8_o5z8;"\
 			      "go run server/server.go -c server/config.json") do
@@ -74,9 +74,10 @@ end
 
 
 def go_run_node(ip, pw)
-	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+	Net::SSH.start(ip, @USERNAME, password: pw) do |ssh|
 		puts "Running node"
-		ssh.exec!("source ~/.profile && cd ~/proj2_g4w8_g6y9a_i6y8_o5z8; go run node/node.go #{@SERVER_IP_PORT}") do
+		ssh.exec!("source ~/.profile && cd ~/proj2_g4w8_g6y9a_i6y8_o5z8;"\
+				  "go run node/node.go 20.36.31.108:12345") do
 			|ch, stream, line|
 			puts line
 		end
