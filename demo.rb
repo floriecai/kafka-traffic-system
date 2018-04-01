@@ -2,12 +2,35 @@ require 'rubygems'
 require 'net/ssh'
 require 'thread'
 
-# GLOBALS
+# INSTANCE VARIABLES
 @USERNAME = "416"
+@RESOURCE_GROUP = "416p2"
 @SERVER_IP_PORT = "20.36.31.108:12345"
 @VM_INDEX
 
 # DEMO METHODS
+
+# AZURE
+def az_vm_start()
+	puts "Starting VM #{@VM_INDEX}"
+	system("az vm start --resource-group #{@RESOURCE_GROUP} --name vm#{@VM_INDEX}")
+	puts "VM started"
+end
+
+
+def az_vm_stop()
+	puts "Stopping VM #{@VM_INDEX}"
+	system("az vm stop --resource-group #{@RESOURCE_GROUP} --name vm#{@VM_INDEX}")
+	puts "VM stopped"
+end
+
+
+def az_vm_dealloc()
+	puts "Deallocating VM #{@VM_INDEX}"
+	system("az vm deallocate --resource-group #{@RESOURCE_GROUP} --name vm#{@VM_INDEX}")
+	puts "VM deallocated"
+end
+
 
 # GO
 def go_run_server(ip, pw)
@@ -20,6 +43,7 @@ def go_run_server(ip, pw)
 		ssh.close()
 	end
 end
+
 
 def go_run_node(ip, pw)
 	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
@@ -44,6 +68,7 @@ def git_status(ip, pw)
 	end
 end
 
+
 def git_checkout(ip, pw, branch)
 	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
 		puts "Checking out branch #{branch}"
@@ -55,6 +80,7 @@ def git_checkout(ip, pw, branch)
 	end
 end
 
+
 def git_pull(ip, pw)
 	Net::SSH.start(host, @USERNAME, :password => pw) do |ssh|
 		puts "Pulling from Stash"
@@ -65,6 +91,7 @@ def git_pull(ip, pw)
 		ssh.close()
 	end
 end
+
 
 # PROMPT METHODS
 def vm_prompt()
@@ -87,6 +114,7 @@ def vm_prompt()
 	end
 end
 
+
 def start_prompt(ip, pw)
 	puts "Choose an option:"
 	puts "  (1) Run Go files"
@@ -105,6 +133,7 @@ def start_prompt(ip, pw)
 	end
 end
 
+
 def go_prompt(ip, pw)
 	puts "Which file would you like to run?"
 	puts "  (1) Server"
@@ -122,6 +151,7 @@ def go_prompt(ip, pw)
 		go_prompt()
 	end
 end
+
 
 def git_prompt(ip, pw)
 	puts "Which Git command would you like to run?"
@@ -143,7 +173,8 @@ def git_prompt(ip, pw)
 	end
 end
 
-# MAIN METHOD
+
+# MAIN
 puts "CPSC416 Project 2 Demo Script"
 puts "Stop with 'q' at any time"
 
@@ -152,4 +183,9 @@ vm_prompt()
 ip = IO.readlines("vm-ips.txt")[@VM_INDEX].strip
 pw = IO.readlines("vm-pws.txt")[@VM_INDEX].strip
 
+az_vm_start()
+
 start_prompt(ip, pw)
+
+az_vm_stop()
+az_vm_dealloc()
