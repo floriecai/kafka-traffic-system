@@ -14,7 +14,7 @@ type Mode int
 type Peer struct {
 	HbChan   chan string
 	PeerConn *rpc.Client
-	DeathFn  func()
+	DeathFn  func(string)
 }
 
 const LEADER_ID = "leader"
@@ -60,14 +60,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 			continue
 		}
 
-		var deathFn = func() {
-			// This is the death function in the case that this peer
-			// dies. There will be more functionality added to this
-			// later for sure. Maybe put into separate function.
-			fmt.Printf("Oh no, my follower %s died!\n", ip)
-		}
-
-		addPeer(ip, client, deathFn)
+		addPeer(ip, client, NodeDeathHandler)
 	}
 	return err
 }
@@ -89,18 +82,11 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 		return err
 	}
 
-	fmt.Printf("I am following the leader with ip msg.LeaderIp now\n")
+	fmt.Printf("I am following the leader with ip %s now\n", msg.LeaderIp)
 
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {
 		return err
-	}
-
-	// This is the death function in the case that the leader dies. There
-	// will be more functionality added to this later for sure. Maybe put
-	// into its own function rather than a variable.
-	var deathFn = func() {
-		fmt.Println("Oh no, the leader died!")
 	}
 
 	// check if there is already a leader connection; if so, kill it.
@@ -110,7 +96,7 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 	}
 
 	LeaderConn = rpc.NewClient(conn)
-	addPeer(LEADER_ID, LeaderConn, deathFn)
+	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler)
 
 	return err
 }
@@ -162,7 +148,7 @@ func checkError(err error, parent string) bool {
 }
 
 // Adds a peer to the map and starts a heartbeat checking procedure for it.
-func addPeer(id string, peerConn *rpc.Client, deathFn func()) {
+func addPeer(id string, peerConn *rpc.Client, deathFn func(string)) {
 	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
 	PeerMap.Store(id, newPeer)
 
@@ -186,3 +172,28 @@ func getPeer(id string) (peer *Peer, ok bool) {
 
 	return &p, true
 }
+
+func NodeDeathHandler(ip string) {
+	// This is the death function in the case that this peer
+	// dies. There will be more functionality added to this
+	// later for sure. Maybe put into separate function.
+	fmt.Printf("Oh no, %s died!\n", ip)
+	switch(NodeMode) {
+	case Follower:
+		if ip == LEADER_ID {
+			//TODO initiate consensus protocol
+			fmt.Println("The leader has died, initiating consensus protocol")
+		} else {
+			//TODO react to death of other peers
+			fmt.Println("Other peer has died, need to notify leader >>TODO<<")
+		}	
+
+	case Leader:
+		fmt.Println("A node has died, need to remove it from everyone's follower list")
+		// TODO
+	default:
+		// no default behavior
+		fmt.Println("serious error occured in NodeDeathHandler")
+	}
+}
+

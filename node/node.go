@@ -65,29 +65,8 @@ func ListenPeerRpc(ln net.Listener) {
 // Server -> Node rpc that sets that node as a leader
 // When it returns the node will have been established as leader
 func (c PeerRpc) Lead(ips []string, _ignored *string) error {
-	if err := node.BecomeLeader(ips, PeerRpcAddr); err != nil {
-		return err
-	}
-
-	for _, ip := range ips {
-		req := node.FollowMeMsg{
-			LeaderIp:    PublicIp,
-			FollowerIps: ips,
-		}
-
-		followerClient, err := rpc.Dial("tcp", ip)
-		if err != nil {
-			return err
-		}
-
-		if err = followerClient.Call("PeerRpc.FollowMe", req, _ignored); err != nil {
-			return err
-		}
-
-		FollowerMap[ip] = followerClient
-	}
-
-	return nil
+	err := node.BecomeLeader(ips, PeerRpcAddr)
+	return err
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader

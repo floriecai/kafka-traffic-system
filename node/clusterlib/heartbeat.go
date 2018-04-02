@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-type TODO struct{}
 
 const HBTIMEOUT = 4
 const HBINTERVAL = 2
@@ -80,7 +79,7 @@ func peerHbSender(id string) {
 	// Note, could use a ticker, but not sure what behaviour would be if
 	// tick occurs while not receiving, eg. occurs in the call.Done branch
 	// before it starts waiting on timeout to complete
-	timeout := createTimeout(HBINTERVAL)
+	timeout := createPeerTimeout(HBINTERVAL)
 
 	for true {
 		arg := id
@@ -133,7 +132,7 @@ func peerHbHandler(id string) {
 		peer.PeerConn.Close()
 
 		fmt.Printf("Peer %s connection has died!", id)
-		peer.DeathFn()
+		peer.DeathFn(id)
 	}()
 
 	// Heartbeat checking loop - does not exit until a peer disconnects
@@ -157,7 +156,7 @@ func peerHbHandler(id string) {
 }
 
 // Starts a goroutine that will write to the returned channel in <secs> seconds.
-func createTimeout(secs time.Duration) (timeout chan bool) {
+func createPeerTimeout(secs time.Duration) (timeout chan bool) {
 	timeout = make(chan bool, 1)
 	go func() {
 		time.Sleep(secs * time.Second)
