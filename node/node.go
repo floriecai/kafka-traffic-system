@@ -70,18 +70,20 @@ func (c PeerRpc) Lead(ips []string, _ignored *string) error {
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader
-func (c PeerRpc) FollowMe(LeaderIp string, _ignored *string) error {
-	err := node.FollowLeader(LeaderIp)
+func (c PeerRpc) FollowMe(msg node.FollowMeMsg, _ignored *string) error {
+	err := node.FollowLeader(msg)
 	return err
 }
 
 // Leader -> Node rpc that tells followers of new joining nodes
-func (c PeerRpc) AddFollower(msg []string, _ignored *string) error {
-	return nil
+func (c PeerRpc) AddFollower(msg node.ModFollowerListMsg, _ignored *string) error {
+	err := node.ModifyFollowerList(msg, true)
+	return err
 }
 
 // Leader -> Node rpc that tells followers of nodes leaving
-func (c PeerRpc) RemoveFollower(msg []string, _ignored *string) error {
+func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) error {
+
 	return nil
 }
 

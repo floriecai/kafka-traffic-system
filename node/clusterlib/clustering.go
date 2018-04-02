@@ -3,7 +3,7 @@ package node
 import (
 	"errors"
 	"fmt"
-	"log"
+	//"log"
 	"net"
 	"net/rpc"
 	"sync"
@@ -29,16 +29,17 @@ var NodeMode Mode = Follower
 var PeerMap *sync.Map
 
 var DirectFollowersList map[string]int // ip -> followerID
-var FollowerListLock sync.Lock
+var FollowerId int = 0 // Global incrementer for follower ID
+var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
 
-var FollowerId int = 1
-var IdIncrementerLock sync.Lock
-
 
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
+
+	DirectFollowersList = make(map[string]int)
 	NodeMode = Leader
+
 
 	for _, ip := range ips {
 		LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
@@ -59,31 +60,48 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		client := rpc.NewClient(conn)
 
 		var _ignored string
+
+		// Read lock on direct followers list
+		FollowerListLock.RLock()
+
+		// It's ok if it fails, gaps in follower ID sequence will not mean anything
+		FollowerId += 1 
+		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
-		err = client.Call("Peer.FollowMe", LeaderAddr, &_ignored)
+		err = client.Call("Peer.FollowMe", msg, &_ignored)
+		FollowerListLock.RUnlock()
+		// unlock
+
 		if err != nil {
 			continue
 		}
 
-		addPeer(ip, client, NodeDeathHandler)
+		// Write lock when modifying the direct followers list
+		FollowerListLock.Lock()
+		DirectFollowersList[ip] = FollowerId
+		FollowerListLock.Unlock()
+		// unlock
+
+		addPeer(ip, client, NodeDeathHandler, FollowerId)
 	}
 	return err
 }
 
-func FollowLeader(LeaderIp string) (err error) {
-	DirectFollowersList = make(map[string]bool)
+func FollowLeader(msg FollowMeMsg) (err error) {
+	DirectFollowersList = msg.FollowerIps
+	FollowerId = msg.YourId
 
 	LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
 		return err
 	}
 
-	PeerAddr, err := net.ResolveTCPAddr("tcp", LeaderIp)
+	PeerAddr, err := net.ResolveTCPAddr("tcp", msg.LeaderIp)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("I am following the leader with ip %s now\n", LeaderIp)
+	fmt.Printf("I am following the leader with ip %s now\n", msg.LeaderIp)
 
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {
@@ -97,31 +115,30 @@ func FollowLeader(LeaderIp string) (err error) {
 	}
 
 	LeaderConn = rpc.NewClient(conn)
-	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler)
+	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler, 0)
 
 	return err
 }
 
-func ModifyFollowerList(ips []string, add bool) error {
+func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
+	FollowerListLock.RLock()
+	defer FollowerListLock.RUnlock()
+
 	if add {
-		for _, ip := range ips {
-			if DirectFollowersList[ip] {
-				log.Println(errors.New("Clustering: Follower is already known"))
-			} else {
-				DirectFollowersList[ip] = true
-			}
+		if ( DirectFollowersList[follower.FollowerIp] > 0 ){
+			err = errors.New("Clustering: Follower is already known")
+		} else {
+				DirectFollowersList[follower.FollowerIp] = follower.FollowerId
 		}
 	} else {
-		for _, ip := range ips {
-			if !DirectFollowersList[ip] {
-				log.Println(errors.New("Clustering: Follower is not known. Cannot remove follower"))
-			} else {
-				delete(DirectFollowersList, ip)
-			}
+		if !(DirectFollowersList[follower.FollowerIp] > 0) {
+			err = errors.New("Clustering: Follower is not known. Cannot remove follower")
+		} else {
+			delete(DirectFollowersList, follower.FollowerIp)
 		}
 	}
 
-	return nil
+	return err
 }
 
 // Code from https://gist.github.com/jniltinho/9787946
@@ -149,19 +166,38 @@ func checkError(err error, parent string) bool {
 }
 
 // Adds a peer to the map and starts a heartbeat checking procedure for it.
-func addPeer(id string, peerConn *rpc.Client, deathFn func(string)) {
+func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
-	PeerMap.Store(id, newPeer)
+	PeerMap.Store(ip, newPeer)
 
-	go peerHbSender(id)
-	go peerHbHandler(id)
+	go peerHbSender(ip)
+	go peerHbHandler(ip)
+
+	if NodeMode == Leader {
+		go AddToFollowerLists(ip, id)
+	}
 }
 
+func AddToFollowerLists(ip string, id int) {
+	FollowerListLock.RLock()
+	defer FollowerListLock.RUnlock()
+	var _ignored bool
+	msg := ModFollowerListMsg{ip, id}
+	// send an add to follower list rpc to every follower
+	for ip, _ := range DirectFollowersList {
+		peer, ok := getPeer(ip)
+		if !ok {
+			fmt.Println("AddToFollowerLists :: ignoring this follower:", ip)
+			continue
+		}
+		peer.PeerConn.Call("Peer.AddFollower", msg, &_ignored)
+	}
+}
 // Retrieve a peer from sync.Map - does the checking. ok will say whether
 // or not a peer was successfully retrieved.
-func getPeer(id string) (peer *Peer, ok bool) {
+func getPeer(ip string) (peer *Peer, ok bool) {
 	// Check if peer in the map and do type assertion
-	val, ok := PeerMap.Load(id)
+	val, ok := PeerMap.Load(ip)
 	if !ok {
 		return nil, false
 	}
