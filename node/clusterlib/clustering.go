@@ -28,9 +28,14 @@ var NodeMode Mode = Follower
 
 var PeerMap *sync.Map
 
-var DirectFollowersList map[string]bool // ip -> true
+var DirectFollowersList map[string]int // ip -> followerID
+var FollowerListLock sync.Lock
 
 var LeaderConn *rpc.Client
+
+var FollowerId int = 1
+var IdIncrementerLock sync.Lock
+
 
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	NodeMode = Leader
@@ -65,24 +70,20 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	return err
 }
 
-func FollowLeader(msg FollowMeMsg) (err error) {
+func FollowLeader(LeaderIp string) (err error) {
 	DirectFollowersList = make(map[string]bool)
-
-	for _, ip := range msg.FollowerIps {
-		DirectFollowersList[ip] = true
-	}
 
 	LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
 		return err
 	}
 
-	PeerAddr, err := net.ResolveTCPAddr("tcp", msg.LeaderIp)
+	PeerAddr, err := net.ResolveTCPAddr("tcp", LeaderIp)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("I am following the leader with ip %s now\n", msg.LeaderIp)
+	fmt.Printf("I am following the leader with ip %s now\n", LeaderIp)
 
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {

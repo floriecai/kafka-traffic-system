@@ -70,8 +70,8 @@ func (c PeerRpc) Lead(ips []string, _ignored *string) error {
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader
-func (c PeerRpc) FollowMe(msg node.FollowMeMsg, _ignored *string) error {
-	err := node.FollowLeader(msg)
+func (c PeerRpc) FollowMe(LeaderIp string, _ignored *string) error {
+	err := node.FollowLeader(LeaderIp)
 	return err
 }
 
