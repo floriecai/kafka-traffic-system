@@ -1,16 +1,33 @@
 package node
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
+
+type FileData struct {
+	Version uint   `json:"version"`
+	Data    string `json:"data"`
+}
+
+type ClusterData struct {
+	Topic   string     `json:"topic"`
+	Dataset []FileData `json: "dataset"`
+}
 
 // Use Sync map for concurrent read and write
 // Use a write lock so we can't have data changed between a load and store
 var fm *sync.Map
 var writeLock *sync.Mutex
 
-// key: Topic -- value: []string where the strings are data
+var TopicName string
+
+// Write to VersionList
+var VersionList = make([]FileData, 0)
+
+// Highest number that we know we have a write to
+var LatestConfirmedIndex uint
 
 // FileSystem related errors //////
 type FileSystemError struct {
@@ -30,7 +47,11 @@ func MountFiles() error {
 	return nil
 }
 
-func WriteFile(topic, data string) error {
+func WriteFile(topic, data string, version uint) error {
+	if TopicName != "" && topic != TopicName {
+		return errors.New("Writing to wrong topic")
+	}
+
 	var topicData []string
 
 	writeLock.Lock()
@@ -63,4 +84,26 @@ func ReadFile(topic string) ([]string, error) {
 	} else {
 		return topicData, FileSystemError{"a general error"}
 	}
+}
+
+// VersionList Helpers
+
+func HasCompleteList() bool {
+	for i, fdata := range VersionList[LatestConfirmedIndex:] {
+		offset := uint(i) + LatestConfirmedIndex
+		if offset != fdata.Version {
+			LatestConfirmedIndex = offset - 1
+			return false
+		}
+	}
+	return true
+}
+
+func GetConfirmedWrites() []FileData {
+	confirmedWrites := make([]FileData, 0)
+	for i := 0; uint(i) < LatestConfirmedIndex; i++ {
+		confirmedWrites = append(confirmedWrites, VersionList[i])
+	}
+
+	return confirmedWrites
 }

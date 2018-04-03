@@ -1,16 +1,21 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"os"
+	"sync"
 
 	"../structs"
 	"./clusterlib"
 )
 
 type ClusterRpc struct {
+	WriteLock *sync.Mutex
+	WriteId   uint
 }
 
 type PeerRpc struct {
@@ -18,13 +23,13 @@ type PeerRpc struct {
 
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
-var FollowerMap map[string]*rpc.Client // ipAddr -> rpcClient
-
 /*******************************
 | Cluster RPC Calls
 ********************************/
 func ListenClusterRpc(ln net.Listener) {
-	cRpc := new(ClusterRpc)
+	cRpc := ClusterRpc{
+		WriteLock: &sync.Mutex{},
+	}
 	server := rpc.NewServer()
 	server.RegisterName("Cluster", cRpc)
 	ClusterRpcAddr = ln.Addr().String()
@@ -33,17 +38,50 @@ func ListenClusterRpc(ln net.Listener) {
 	server.Accept(ln)
 }
 
-func (c ClusterRpc) Write(write structs.WriteMsg, response *string) error {
-	// TODO: Do we need WriteMsg.Id?
+func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 
-	err := node.WriteFile(write.Topic, write.Data)
-	// TODO: Call Propagate
-	return err
+	c.WriteLock.Lock()
+	writeId := c.WriteId
+	c.WriteLock.Unlock()
+
+	var numReplies uint
+	if node.NodeMode == node.Leader {
+		node.PeerMap.MapLock.RLock()
+		for ip, peer := range node.PeerMap.Map {
+			var writeConfirmed bool
+
+			resp := node.PropagateWriteReq{
+				Topic:      write.Topic,
+				VersionNum: writeId,
+				LeaderId:   PublicIp,
+				Data:       write.Data,
+			}
+
+			if err := peer.PeerConn.Call("PeerRpc.ConfirmWrite", resp, &writeConfirmed); err != nil {
+				log.Println("Error in Write to Peer: [%d]", ip)
+				checkError(err, "WriteToCluster")
+			}
+
+			if writeConfirmed {
+				numReplies++
+			}
+		}
+		node.PeerMap.MapLock.RUnlock()
+
+		if uint8(numReplies) < node.MinConnections {
+			if err := node.WriteFile(write.Topic, write.Data, writeId); err != nil {
+				return err
+			}
+
+			*resp = true
+			return nil
+		}
+	}
+	log.Println("WriteToCluster:: Node is not a leader. Should not have received Write")
+	return errors.New("Node is not a leader. Cannot send Write")
 }
 
-func (c ClusterRpc) Read(topic string, response *[]string) error {
-	// TODO: Do we need WriteMsg.Id?
-
+func (c ClusterRpc) ReadFromCluster(topic string, response *[]string) error {
 	topicData, err := node.ReadFile(topic)
 	*response = topicData
 	return err
@@ -105,14 +143,22 @@ func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 	return node.PeerHeartbeat(ip, reply)
 }
 
+// Leader -> Follower RPC to commit write
+func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
+	if err := node.WriteFile(req.Topic, req.Data, req.VersionNum); err != nil {
+		checkError(err, "ConfirmWrite")
+		return err
+	}
+
+	*writeOk = true
+	return nil
+}
+
 /*******************************
 | Main
 ********************************/
 func main() {
 	serverIP := os.Args[1]
-
-	// Initiate data structures
-	FollowerMap = make(map[string]*rpc.Client)
 
 	PublicIp = node.GeneratePublicIP()
 	fmt.Println("The public IP is:", PublicIp)
@@ -133,4 +179,12 @@ func main() {
 	go node.ServerHeartBeat(PeerRpcAddr)
 	// Open Cluster to App RPC
 	ListenClusterRpc(ln1)
+}
+
+func checkError(err error, parent string) bool {
+	if err != nil {
+		log.Println(parent, ":: found error! ", err)
+		return true
+	}
+	return false
 }

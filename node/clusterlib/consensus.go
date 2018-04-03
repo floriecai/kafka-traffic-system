@@ -58,7 +58,7 @@ func StartConsensusProtocol() {
 
 	for len(DirectFollowersList) > 0 {
 	// case 1: we are the lowest follower and likely to become leader
-		if FollowerId == lowestFollowerId {
+		if (FollowerId == lowestFollowerId) {
 			fmt.Println("Expecting to become leader")
 
 			electionLock.Lock()
@@ -94,7 +94,6 @@ func StartConsensusProtocol() {
 	}
 
 }
-
 
 // Function WriteAfterConsent will start a consensus job, which will write to
 // disk and propagate the confirmation of the data for the datumNum provided if
@@ -309,7 +308,7 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 			// Receive a new FollowerIp
 			// Add it to potential followers list
 			// if we have enough then we end the election process
-			case follower := <- receiveFollowerCh:
+			case follower := <-receiveFollowerCh:
 				electionLock.Lock()
 				/////////////
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
@@ -321,7 +320,7 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 				/////////////
 				electionLock.Unlock()
 
-			case <- timeoutCh:
+			case <-timeoutCh:
 				// Delete the channel from the map, but do not
 				// close (unsafe to do so). I trust the golang
 				// GC to clean this up once it's not in the map.

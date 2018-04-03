@@ -17,6 +17,33 @@ type Peer struct {
 	DeathFn  func(string)
 }
 
+type PeerCMap struct {
+	MapLock sync.RWMutex
+	Map     map[string]Peer
+}
+
+///////////// Map functions for concurrent Peer Map //////////////////
+func (pm *PeerCMap) Get(k string) (Peer, bool) {
+	pm.MapLock.RLock()
+	defer pm.MapLock.RUnlock()
+	v, exists := pm.Map[k]
+	return v, exists
+}
+
+func (pm *PeerCMap) Set(k string, v Peer) {
+	pm.MapLock.Lock()
+	defer pm.MapLock.Unlock()
+	pm.Map[k] = v
+}
+
+func (pm *PeerCMap) Delete(k string) {
+	pm.MapLock.Lock()
+	defer pm.MapLock.Unlock()
+	delete(pm.Map, k)
+}
+
+///////////// Map functions for concurrent Peer Map //////////////////
+
 const LEADER_ID = "leader"
 
 const (
@@ -26,17 +53,15 @@ const (
 
 var NodeMode Mode = Follower
 
-var PeerMap sync.Map
+var PeerMap PeerCMap = PeerCMap{Map: make(map[string]Peer)}
 
 var DirectFollowersList map[string]int // ip -> followerID
 // Global incrementer for follower ID
 // For followers this will be a static value of the assigned follower ID
-var FollowerId int = 0 
-
+var FollowerId int = 0
 var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
-
 
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	// reference addr for consensus.go
@@ -71,7 +96,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		FollowerListLock.RLock()
 		////////////////////////////
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
-		FollowerId += 1 
+		FollowerId++
 		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
 		err = client.Call("Peer.FollowMe", msg, &_ignored)
@@ -114,7 +139,7 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 	}
 
 	// check if there is already a leader connection; if so, kill it.
-	oldLeader, ok := getPeer(LEADER_ID)
+	oldLeader, ok := PeerMap.Get(LEADER_ID)
 	if ok {
 		oldLeader.HbChan <- "die"
 	}
@@ -134,10 +159,10 @@ func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
 	defer FollowerListLock.Unlock()
 
 	if add {
-		if ( DirectFollowersList[follower.FollowerIp] > 0 ){
+		if DirectFollowersList[follower.FollowerIp] > 0 {
 			err = errors.New("Clustering: Follower is already known")
 		} else {
-				DirectFollowersList[follower.FollowerIp] = follower.FollowerId
+			DirectFollowersList[follower.FollowerIp] = follower.FollowerId
 		}
 	} else {
 		if !(DirectFollowersList[follower.FollowerIp] > 0) {
@@ -177,7 +202,7 @@ func checkError(err error, parent string) bool {
 // Adds a peer to the map and starts a heartbeat checking procedure for it.
 func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
-	PeerMap.Store(ip, newPeer)
+	PeerMap.Set(ip, newPeer)
 
 	go peerHbSender(ip)
 	go peerHbHandler(ip)
@@ -194,7 +219,7 @@ func AddToFollowerLists(ip string, id int) {
 	msg := ModFollowerListMsg{ip, id}
 	// send an add to follower list rpc to every follower
 	for ip, _ := range DirectFollowersList {
-		peer, ok := getPeer(ip)
+		peer, ok := PeerMap.Get(ip)
 		if !ok {
 			fmt.Println("AddToFollowerLists :: ignoring this follower:", ip)
 			continue
@@ -210,7 +235,7 @@ func RemoveFromFollowerLists(ip string, id int) {
 	msg := ModFollowerListMsg{ip, id}
 	// send an add to follower list rpc to every follower
 	for ip, _ := range DirectFollowersList {
-		peer, ok := getPeer(ip)
+		peer, ok := PeerMap.Get(ip)
 		if !ok {
 			fmt.Println("RemoveFromFollowerLists :: ignoring this follower:", ip)
 			continue
@@ -221,27 +246,27 @@ func RemoveFromFollowerLists(ip string, id int) {
 
 // Retrieve a peer from sync.Map - does the checking. ok will say whether
 // or not a peer was successfully retrieved.
-func getPeer(ip string) (peer *Peer, ok bool) {
-	// Check if peer in the map and do type assertion
-	val, ok := PeerMap.Load(ip)
-	if !ok {
-		return nil, false
-	}
-	p, ok := val.(Peer)
-	if !ok {
-		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
-		return nil, false
-	}
+// func getPeer(ip string) (peer *Peer, ok bool) {
+// 	// Check if peer in the map and do type assertion
+// 	val, ok := PeerMap.Load(ip)
+// 	if !ok {
+// 		return nil, false
+// 	}
+// 	p, ok := val.(Peer)
+// 	if !ok {
+// 		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
+// 		return nil, false
+// 	}
 
-	return &p, true
-}
+// 	return &p, true
+// }
 
 func NodeDeathHandler(ip string) {
 	// This is the death function in the case that this peer
 	// dies. There will be more functionality added to this
 	// later for sure. Maybe put into separate function.
 	fmt.Printf("Oh no, %s died!\n", ip)
-	switch(NodeMode) {
+	switch NodeMode {
 	case Follower:
 		if ip == LEADER_ID {
 			//TODO initiate consensus protocol
@@ -251,7 +276,7 @@ func NodeDeathHandler(ip string) {
 		} else {
 			//TODO react to death of other peers
 			fmt.Println("Other peer has died, need to notify leader >>TODO<<")
-		}	
+		}
 
 	case Leader:
 		fmt.Println("A node has died, need to remove it from everyone's follower list")
@@ -266,4 +291,3 @@ func NodeDeathHandler(ip string) {
 		fmt.Println("serious error occured in NodeDeathHandler")
 	}
 }
-

@@ -1,9 +1,6 @@
 package main
 
 import (
-	//"encoding/gob"
-	"../structs"
-	c "./concurrentlib"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +12,9 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"../structs"
+	c "./concurrentlib"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -190,7 +190,7 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
-		if uint32(len(orphanNodes.Orphans)) >= config.MinClusterSize {
+		if orphanNodes.Len >= config.MinClusterSize {
 			orphanNodes.Lock()
 			lNode := orphanNodes.Orphans[0]
 			orphanNodes.Unlock()
@@ -221,13 +221,13 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				return err
 			}
 
-			droppedOrphans := orphanNodes.DropN(int(config.MinClusterSize))
+			orphanNodes.DropN(int(config.MinClusterSize))
 
 			topic := structs.Topic{
 				TopicName:   *topicName,
 				MinReplicas: config.NodeSettings.MinNumNodeConnections,
-				Leaders:     []structs.Node{lNode},
-				Followers:   droppedOrphans[1:]}
+				Leaders:     orphanIps[:1],
+				Followers:   orphanIps[1:]}
 
 			topics.Set(*topicName, topic)
 			*topicReply = topic
