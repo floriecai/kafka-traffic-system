@@ -60,7 +60,7 @@ func StartConsensusProtocol() {
 
 		// create Consensus job that returns an update channel and a channel for the func to receive followers on
 		var updateChannel chan bool
-		updateChannel, receiveFollowerChannel = createConsensusJob()
+		updateChannel, receiveFollowerChannel = StartElection()
 		// block on update channel
 		becameLeader := <- updateChannel
 		// when channel returns and it's true then start become leader protocol
@@ -222,31 +222,69 @@ func CheckPeerNominateAccept(peerLatestNum int, peerId string) bool {
 	// check if chosenLeaderId is still peerId, and return the result
 	return (peerId == chosenLeaderId)
 }
-
+*/
 // Function PeerAcceptThisNode should be called if a peer has accepted that
 // this node should be leader. Currently is not responsible for ensuring that
 // each peer has only sent their acceptance once. (maybe it should be though)
-func PeerAcceptThisNode() {
+func PeerAcceptThisNode(ip string) error {
 	electionLock.Lock()
 	defer electionLock.Unlock()
 
-	electionNumAccepted++
-	if electionNumAccepted > electionNumRequired {
-		select {
-		case nominationCompleteCh <- true:
-			fmt.Println("Writed completion to nominationComplete")
-		default:
-			fmt.Println("nominationCompleteCh in full")
+	if electionInProgress {
+		receiveFollowerChannel <- ip
+		return nil
+	} else {		
+		// from clustering.go
+		// it's likely this cluster is trying to join after
+		// an election so just accept it
+		LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
+		if err != nil {
+			return err
 		}
+
+		PeerAddr, err := net.ResolveTCPAddr("tcp", ip)
+		if err != nil {
+			return err
+		}
+
+		conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
+		if err != nil {
+			return err
+		}
+
+		client := rpc.NewClient(conn)
+
+		var _ignored string
+
+		FollowerListLock.RLock()
+		////////////////////////////
+		// It's ok if it fails, gaps in follower ID sequence will not mean anything
+		FollowerId += 1 
+		msg := FollowMeMsg{MyAddr, DirectFollowersList, FollowerId}
+		fmt.Printf("Telling node with ip %s to follow me\n", ip)
+		err = client.Call("Peer.FollowMe", msg, &_ignored)
+		////////////////////////////
+		FollowerListLock.RUnlock()
+		if err != nil {
+			return err
+		}
+
+		// Write lock when modifying the direct followers list
+		FollowerListLock.Lock()
+		DirectFollowersList[ip] = FollowerId
+		FollowerListLock.Unlock()
+		// unlock
+
+		addPeer(ip, client, NodeDeathHandler, FollowerId)
 	}
+
 }
-*/
+
 // This function starts a consensus job. A caller should update the job when
-// new messages are received using the update channel. The function parameter
-// fn will be called if there is a consensus reached. Consensus is considered
-// successful when there are a number of writes to the updateChannel that is
-// at least half of numFollowers.
-func createConsensusJob() (updateCh chan bool, receiveFollowerCh chan string) {
+// new messages are received using the update channel. Consensus is considered
+// successful when there are a number of writes to the potential follower list that is
+// at least the min connections needed for a cluster
+func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 	updateCh = make(chan bool, 32)
 	receiveFollowerCh = make(chan string, 32)
 	timeoutCh := createTimeout(ELECTION_WAIT_FOR_RESULTS)
