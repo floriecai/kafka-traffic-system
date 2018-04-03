@@ -1,9 +1,8 @@
 package lib
 
 import (
+	//"../structs"
 	"fmt"
-
-	"../shared"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,7 +26,7 @@ func (e DisconnectedServerError) Error() string {
 // No Cluster with the given TopicName exists
 type TopicDoesNotExistError string
 
-func (e TopicClusterDoesNotExistError) Error() string {
+func (e TopicDoesNotExistError) Error() string {
 	return fmt.Sprintf("Consumer: Topic with name [%s] does not exist", string(e))
 }
 
@@ -37,39 +36,39 @@ func (e TopicClusterDoesNotExistError) Error() string {
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // <API>
 
-type Consumer interface {
-	// Returns the Topic associated with the given gpsCoordinates
-	// Can return the following errors:
-	// - TopicDoesNotExistError
-	GetCurrentLocationCluster(gpsCoordinates GPSCoordinates) (topic shared.Topic, err error)
-
-	// Returns the Topic the client will connect to and read from
-	// Can return the following errors:
-	// - TopicDoesNotExistError
-	// - DisconnectedServerError
-	GetCluster(topicName string) (topic shared.Topic, err error)
-
-	// Returns a list of all GPSCoordinates that have been written to the Topic
-	// Can returen the following errors:
-	// - DataUnvailableError
-	Read(topicName string) (gpsCoordinates shared.GPSCoordinates, err error)
-}
-
-type ConsumerNode struct {
-	shared.Node
-}
-
-func (cn ConsumerNode) GetCurrentLocationTopic(gpsCoordinates shared.GPSCoordinates) (topic shared.Topic, err error) {
-	// TODO
-}
-
-func (cn ConsumerNode) GetCluster(topicName string) (topic shared.Topic, err error) {
-	// TODO
-}
-
-func (cn ConsumerNode) Read(topicName string) (gpsCoordinates shared.GPSCoordinates, err error) {
-	// TODO
-}
+//type Consumer interface {
+//	// Returns the Topic associated with the given gpsCoordinates
+//	// Can return the following errors:
+//	// - TopicDoesNotExistError
+//	GetCurrentLocationCluster(gpsCoordinates GPSCoordinates) (topic structs.Topic, err error)
+//
+//	// Returns the Topic the client will connect to and read from
+//	// Can return the following errors:
+//	// - TopicDoesNotExistError
+//	// - DisconnectedServerError
+//	GetCluster(topicName string) (topic structs.Topic, err error)
+//
+//	// Returns a list of all GPSCoordinates that have been written to the Topic
+//	// Can returen the following errors:
+//	// - DataUnvailableError
+//	Read(topicName string) (gpsCoordinates structs.GPSCoordinates, err error)
+//}
+//
+//type ConsumerNode struct {
+//	structs.Node
+//}
+//
+//func (cn ConsumerNode) GetCurrentLocationTopic(gpsCoordinates structs.GPSCoordinates) (topic structs.Topic, err error) {
+//	// TODO
+//}
+//
+//func (cn ConsumerNode) GetCluster(topicName string) (topic structs.Topic, err error) {
+//	// TODO
+//}
+//
+//func (cn ConsumerNode) Read(topicName string) (gpsCoordinates structs.GPSCoordinates, err error) {
+//	// TODO
+//}
 
 // </API>
 ///////////////////////////////////////////////////////////////////////////////////////////////////
