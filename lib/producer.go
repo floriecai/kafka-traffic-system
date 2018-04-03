@@ -37,10 +37,13 @@ type WriteSession struct {
 //
 // Parameter serverAddr should be an ip:port combination.
 func OpenTopic(topicName string, serverAddr string, myId string) (*WriteSession, error) {
+	fmt.Println("Attempting server dial")
 	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		return nil, ConnectionError(err.Error())
 	}
+
+	fmt.Println("Successfully dialed server")
 
 	serverRpc := rpc.NewClient(conn)
 	defer serverRpc.Close()
@@ -48,24 +51,27 @@ func OpenTopic(topicName string, serverAddr string, myId string) (*WriteSession,
 	var topicData structs.Topic
 
 	// First attempt to get topic
+	fmt.Println("Attempting get topic")
 	err = serverRpc.Call("TServer.GetTopic", &topicName, &topicData)
 	if err == nil {
 		return connectToLeader(topicData, myId)
 	}
 
 	// Attempt to create topic
-	fmt.Println("Could not get topic; attempting to create topic")
+	fmt.Println("Could not get topic; attempting to create topic:", err)
 	err = serverRpc.Call("TServer.CreateTopic", &topicName, &topicData)
 	if err == nil {
 		return connectToLeader(topicData, myId)
 	}
 
 	// Attempt to get topic again in case of race condition
+	fmt.Println("Could not create topic; attempting to get topic again:", err)
 	err = serverRpc.Call("TServer.GetTopic", &topicName, &topicData)
 	if err == nil {
 		return connectToLeader(topicData, myId)
 	}
 
+	fmt.Println("Final error, quitting:", err)
 	return nil, fmt.Errorf("Could not get or create topic.\n")
 }
 
@@ -104,6 +110,7 @@ func (s *WriteSession) Write(datum string) error {
 
 // Attempt to connect to a topic leader for writing
 func connectToLeader(topicData structs.Topic, myId string) (*WriteSession, error) {
+	fmt.Println("Attempting to connect to leader")
 	// There should only be one leader in the current implementation, so
 	// only attempt the 0th index.
 	conn, err := net.Dial("tcp", topicData.Leaders[0].Address)
@@ -118,6 +125,7 @@ func connectToLeader(topicData structs.Topic, myId string) (*WriteSession, error
 		return nil, ConnectionError("rpc.NewClient failed")
 	}
 
+	fmt.Println("Successfully connected to leader:", topicData.Leaders[0].Address)
 	return &WriteSession{
 		topicData.TopicName,
 		myId,

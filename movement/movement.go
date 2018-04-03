@@ -9,8 +9,8 @@ Public types:
 	Neighbours
 
 Public functions:
-	CreateLocationGraph(fname string) -> (map[Point]*Neighbours, error)
-	Travel(start Point, graph map[Point]*Neighbours, fn func(p Point))
+	CreateLocationGraph
+	Travel
 
 */
 package movement

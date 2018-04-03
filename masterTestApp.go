@@ -45,7 +45,11 @@ func main() {
 	}
 
 	var producerNodeId = 0
-	for _, file := range files {
+	for i, file := range files {
+		if i == 0 {
+			continue
+		}
+
 		fmt.Println("Starting client node with graph file", file)
 
 		m, err, firstPoint := movement.CreateLocationGraph(file)
