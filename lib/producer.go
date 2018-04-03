@@ -106,7 +106,7 @@ func (s *WriteSession) Write(datum string) error {
 	req.Id = s.clientId
 	req.Data = datum
 
-	return s.leaderConn.Call("Cluster.Write", req, &resp)
+	return s.leaderConn.Call("Cluster.WriteToCluster", req, &resp)
 }
 
 // Attempt to connect to a topic leader for writing
