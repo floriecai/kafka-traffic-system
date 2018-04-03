@@ -121,8 +121,8 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 }
 
 func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
-	FollowerListLock.RLock()
-	defer FollowerListLock.RUnlock()
+	FollowerListLock.Lock()
+	defer FollowerListLock.Unlock()
 
 	if add {
 		if ( DirectFollowersList[follower.FollowerIp] > 0 ){
@@ -193,6 +193,23 @@ func AddToFollowerLists(ip string, id int) {
 		peer.PeerConn.Call("Peer.AddFollower", msg, &_ignored)
 	}
 }
+
+func RemoveFromFollowerLists(ip string, id int) {
+	FollowerListLock.RLock()
+	defer FollowerListLock.RUnlock()
+	var _ignored bool
+	msg := ModFollowerListMsg{ip, id}
+	// send an add to follower list rpc to every follower
+	for ip, _ := range DirectFollowersList {
+		peer, ok := getPeer(ip)
+		if !ok {
+			fmt.Println("RemoveFromFollowerLists :: ignoring this follower:", ip)
+			continue
+		}
+		peer.PeerConn.Call("Peer.RemoveFollower", msg, &_ignored)
+	}
+}
+
 // Retrieve a peer from sync.Map - does the checking. ok will say whether
 // or not a peer was successfully retrieved.
 func getPeer(ip string) (peer *Peer, ok bool) {
@@ -227,7 +244,12 @@ func NodeDeathHandler(ip string) {
 
 	case Leader:
 		fmt.Println("A node has died, need to remove it from everyone's follower list")
-		// TODO
+		FollowerListLock.Lock()
+		id := DirectFollowersList[ip]
+		delete(DirectFollowersList, ip)
+		FollowerListLock.Unlock()
+		RemoveFromFollowerLists(ip, id)
+
 	default:
 		// no default behavior
 		fmt.Println("serious error occured in NodeDeathHandler")
