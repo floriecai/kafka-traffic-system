@@ -64,6 +64,7 @@ func (o *Orphanage) Append(orphan structs.Node) {
 	o.Lock()
 	defer o.Unlock()
 	o.Orphans = append(o.Orphans, orphan)
+	o.Len++
 }
 
 // Drop n items from the front of the Orphanage

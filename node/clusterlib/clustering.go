@@ -34,8 +34,13 @@ var LeaderConn *rpc.Client
 
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	NodeMode = Leader
+	req := FollowMeMsg{LeaderAddr, ips}
 
 	for _, ip := range ips {
+		if ip == LeaderAddr {
+			continue
+		}
+
 		LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 		if err != nil {
 			continue
@@ -55,7 +60,8 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 
 		var _ignored string
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
-		err = client.Call("Peer.FollowMe", LeaderAddr, &_ignored)
+		fmt.Printf("LeaderAddr: %s\n", LeaderAddr)
+		err = client.Call("Peer.FollowMe", req, &_ignored)
 		if err != nil {
 			continue
 		}
@@ -89,7 +95,7 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 		return err
 	}
 
-	fmt.Printf("I am following the leader with ip msg.LeaderIp now\n")
+	fmt.Printf("I am following the leader with ip %s now\n", msg.LeaderIp)
 
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {

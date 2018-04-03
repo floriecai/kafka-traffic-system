@@ -69,23 +69,24 @@ func (c PeerRpc) Lead(ips []string, _ignored *string) error {
 		return err
 	}
 
-	for _, ip := range ips {
-		req := node.FollowMeMsg{
-			LeaderIp:    PublicIp,
-			FollowerIps: ips,
-		}
-
-		followerClient, err := rpc.Dial("tcp", ip)
-		if err != nil {
-			return err
-		}
-
-		if err = followerClient.Call("PeerRpc.FollowMe", req, _ignored); err != nil {
-			return err
-		}
-
-		FollowerMap[ip] = followerClient
-	}
+	// Florie said to remove this for now
+	//	for _, ip := range ips {
+	//		req := node.FollowMeMsg{
+	//			LeaderIp:    PeerRpcAddr,
+	//			FollowerIps: ips,
+	//		}
+	//
+	//		followerClient, err := rpc.Dial("tcp", ip)
+	//		if err != nil {
+	//			return err
+	//		}
+	//
+	//		if err = followerClient.Call("Peer.FollowMe", req, _ignored); err != nil {
+	//			return err
+	//		}
+	//
+	//		FollowerMap[ip] = followerClient
+	//	}
 
 	return nil
 }
