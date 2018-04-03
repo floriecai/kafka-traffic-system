@@ -51,12 +51,12 @@ var MyAddr string
 // Called when the leader heartbeat dstops
 func StartConsensusProtocol() {
 
-	lowestFollowerIp, lowestFollowerId := ScanFollowerList()
 
 	// create Consensus job that returns an update channel and a channel for the func to receive followers on
 	var updateChannel chan bool
 
 	for len(DirectFollowersList) > 0 {
+		lowestFollowerIp, lowestFollowerId := ScanFollowerList()
 	// case 1: we are the lowest follower and likely to become leader
 		if (FollowerId == lowestFollowerId) {
 			fmt.Println("Expecting to become leader")
@@ -85,7 +85,8 @@ func StartConsensusProtocol() {
 	// case 2: we should connect to the lowest follower
 			fmt.Println("Try to follow this leader:", lowestFollowerIp)
 			updateChannel, receiveFollowerChannel = Nominate()
-
+			// TODO: send follow rpc to lowestFollowerIp
+			go PeerFollowThatNode(lowestFollowerIp)
 			nominationAccepted := <- updateChannel
 			if nominationAccepted {
 				break
@@ -290,6 +291,40 @@ func PeerAcceptThisNode(ip string) error {
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
 		return nil
 	}
+
+}
+
+// Function PeerFollowThatNode should be called if this node wants to follow
+// the ipaddress of the given node
+func PeerFollowThatNode(ip string) error {
+	electionLock.Lock()
+	defer electionLock.Unlock()
+	
+	LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
+	if err != nil {
+		return err
+	}
+
+	PeerAddr, err := net.ResolveTCPAddr("tcp", ip)
+	if err != nil {
+		return err
+	}
+
+	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
+	if err != nil {
+		return err
+	}
+
+	client := rpc.NewClient(conn)
+
+	var _ignored string
+	fmt.Printf("Telling node with ip %s that I want to follow him\n", ip)
+	err = client.Call("Peer.Follow", MyAddr, &_ignored)
+	if err != nil {
+		return err
+	}
+	return nil
+
 
 }
 
