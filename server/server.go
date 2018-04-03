@@ -190,7 +190,7 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
-		if orphanNodes.Len >= config.MinClusterSize {
+		if uint32(len(orphanNodes.Orphans)) >= config.MinClusterSize {
 			orphanNodes.Lock()
 			lNode := orphanNodes.Orphans[0]
 			orphanNodes.Unlock()
@@ -216,7 +216,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 			}
 
 			var ignore string
-			if err := node.Client.Call("PeerRpc.Lead", orphanIps, &ignore); err != nil {
+			if err := node.Client.Call("Peer.Lead", orphanIps, &ignore); err != nil {
 				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
 				return err
 			}

@@ -9,8 +9,8 @@ Public types:
 	Neighbours
 
 Public functions:
-	CreateLocationGraph(fname string) -> (map[Point]*Neighbours, error)
-	Travel(start Point, graph map[Point]*Neighbours, fn func(p Point))
+	CreateLocationGraph
+	Travel
 
 */
 package movement
@@ -84,16 +84,20 @@ Note that each number must have a decimal point, and at least one number
 numeric character on each side of the decimal point. There must be no
 duplicate pairs.
 */
-func CreateLocationGraph(fname string) (map[Point]*Neighbours, error) {
+func CreateLocationGraph(fname string) (map[Point]*Neighbours, error, Point) {
 	graph := make(map[Point]*Neighbours, 0)
+	firstPoint := Point{0, 0}
 
 	f, err := os.OpenFile(fname, os.O_RDONLY, 0644)
 	if err != nil {
-		return nil, err
+		return nil, err, firstPoint
 	}
 
 	// iterate over all of the coordinate pairs in the file
 	r := bufio.NewReader(f)
+
+	// Variable used for grabbing the very first point in the file
+	gotFirstPoint := false
 
 	for {
 		str, err := readln(r)
@@ -123,6 +127,10 @@ func CreateLocationGraph(fname string) (map[Point]*Neighbours, error) {
 			continue
 		}
 		p1 := Point{float1, float2}
+		if !gotFirstPoint {
+			firstPoint = p1
+			gotFirstPoint = true
+		}
 
 		// Parse the numbers for the second coordinate
 		float1, err = strconv.ParseFloat(match[2], 64)
@@ -156,7 +164,7 @@ func CreateLocationGraph(fname string) (map[Point]*Neighbours, error) {
 		}
 	}
 
-	return graph, nil
+	return graph, nil, firstPoint
 }
 
 /*
@@ -167,7 +175,7 @@ TODO:
 - configurable distance increments instead of hard-coded 1.0
 - configurable update interval instead of hard-coded 100ms
 */
-func Travel(start Point, graph map[Point]*Neighbours, fn func(p Point)) {
+func Travel(start Point, graph map[Point]*Neighbours, speed float64, fn func(p Point)) {
 	prevPoint := start
 
 	neighbours, exists := graph[start]
@@ -180,7 +188,7 @@ func Travel(start Point, graph map[Point]*Neighbours, fn func(p Point)) {
 
 	for {
 		// get the path iterator
-		pointgen := linePointsGen(prevPoint, nextPoint)
+		pointgen := linePointsGen(prevPoint, nextPoint, speed)
 		x, y, e := pointgen()
 
 		// travel the path
@@ -267,7 +275,7 @@ func getLineParams(p1, p2 Point) (sT slopeType, slope, intercept float64) {
 }
 
 // Generates an iterator for movement along a line
-func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
+func linePointsGen(p1, p2 Point, speed float64) (gen func() (x, y float64, e error)) {
 	// Set up math
 	slopeT, slope, _ := getLineParams(p1, p2)
 
@@ -289,7 +297,7 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			}
 
 			xPrev = x
-			x += 1.0
+			x += speed
 
 			return xPrev, y, nil
 		}
@@ -300,7 +308,7 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			}
 
 			xPrev = x
-			x -= 1.0
+			x -= speed
 
 			return xPrev, y, nil
 		}
@@ -313,8 +321,8 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			yPrev = y
 			xPrev = x
 
-			y += math.Sin(theta)
-			x += math.Cos(theta)
+			y += speed * math.Sin(theta)
+			x += speed * math.Cos(theta)
 
 			return xPrev, yPrev, nil
 		}
@@ -327,8 +335,8 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			yPrev = y
 			xPrev = x
 
-			y += math.Sin(theta)
-			x += math.Cos(theta)
+			y += speed * math.Sin(theta)
+			x += speed * math.Cos(theta)
 
 			return xPrev, yPrev, nil
 		}
@@ -341,8 +349,8 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			yPrev = y
 			xPrev = x
 
-			y -= math.Sin(theta)
-			x -= math.Cos(theta)
+			y -= speed * math.Sin(theta)
+			x -= speed * math.Cos(theta)
 
 			return xPrev, yPrev, nil
 		}
@@ -355,8 +363,8 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			yPrev = y
 			xPrev = x
 
-			y -= math.Sin(theta)
-			x -= math.Cos(theta)
+			y -= speed * math.Sin(theta)
+			x -= speed * math.Cos(theta)
 
 			return xPrev, yPrev, nil
 		}
@@ -367,7 +375,7 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			}
 
 			yPrev := y
-			y += 1.0
+			y += speed
 
 			return x, yPrev, nil
 		}
@@ -378,7 +386,7 @@ func linePointsGen(p1, p2 Point) (gen func() (x, y float64, e error)) {
 			}
 
 			yPrev := y
-			y -= 1.0
+			y -= speed
 
 			return x, yPrev, nil
 		}

@@ -26,7 +26,7 @@ const (
 
 var NodeMode Mode = Follower
 
-var PeerMap *sync.Map
+var PeerMap sync.Map
 
 var DirectFollowersList map[string]int // ip -> followerID
 // Global incrementer for follower ID
@@ -44,8 +44,11 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	DirectFollowersList = make(map[string]int)
 	NodeMode = Leader
 
-
 	for _, ip := range ips {
+		if ip == LeaderAddr {
+			continue
+		}
+
 		LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 		if err != nil {
 			continue
@@ -65,17 +68,15 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 
 		var _ignored string
 
-		// Read lock on direct followers list
 		FollowerListLock.RLock()
-
+		////////////////////////////
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
 		FollowerId += 1 
 		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
 		err = client.Call("Peer.FollowMe", msg, &_ignored)
+		////////////////////////////
 		FollowerListLock.RUnlock()
-		// unlock
-
 		if err != nil {
 			continue
 		}
