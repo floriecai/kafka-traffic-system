@@ -1,7 +1,6 @@
 package main
 
 import (
-	//"encoding/gob"
 	"encoding/json"
 	"flag"
 	"fmt"

@@ -14,9 +14,9 @@ package node
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"time"
-	"math"
 )
 
 // Maximum number of seconds for consensus job to wait for before timeout error.
@@ -62,7 +62,7 @@ func StartConsensusProtocol() {
 		var updateChannel chan bool
 		updateChannel, receiveFollowerChannel = createConsensusJob()
 		// block on update channel
-		becameLeader := <- updateChannel
+		becameLeader := <-updateChannel
 		// when channel returns and it's true then start become leader protocol
 		// Assume PotentialFollowerIps was filled up
 		if becameLeader {
@@ -70,14 +70,13 @@ func StartConsensusProtocol() {
 			// TODO: Notify server once you've become leader
 		}
 
-	// TODO: Make this an infinite loop until the follower list exhausted
+		// TODO: Make this an infinite loop until the follower list exhausted
 	} else {
-	// case 2: we should connect to the lowest follower
+		// case 2: we should connect to the lowest follower
 		fmt.Println("Try to follow this leader:", lowestFollowerIp)
 	}
 
 }
-
 
 // Function WriteAfterConsent will start a consensus job, which will write to
 // disk and propagate the confirmation of the data for the datumNum provided if
@@ -257,7 +256,7 @@ func createConsensusJob() (updateCh chan bool, receiveFollowerCh chan string) {
 			// Receive a new FollowerIp
 			// Add it to potential followers list
 			// if we have enough then we end the election process
-			case follower := <- receiveFollowerCh:
+			case follower := <-receiveFollowerCh:
 				electionLock.Lock()
 				/////////////
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
@@ -269,7 +268,7 @@ func createConsensusJob() (updateCh chan bool, receiveFollowerCh chan string) {
 				/////////////
 				electionLock.Unlock()
 
-			case <- timeoutCh:
+			case <-timeoutCh:
 				// Delete the channel from the map, but do not
 				// close (unsafe to do so). I trust the golang
 				// GC to clean this up once it's not in the map.
@@ -320,5 +319,5 @@ func ScanFollowerList() (lowestFollowerIp string, lowestFollowerId int) {
 			lowestFollowerIp = ip
 		}
 	}
-	return lowestFollowerIp,lowestFollowerId
+	return lowestFollowerIp, lowestFollowerId
 }

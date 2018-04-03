@@ -70,7 +70,7 @@ func (o *Orphanage) Append(orphan structs.Node) {
 // Drop n items from the front of the Orphanage
 // Lock is manually set from caller
 func (o *Orphanage) DropN(n int) []structs.Node {
-	droppedNodes := o.Orphans[0:n]
+	droppedNodes := o.Orphans[:n]
 	o.Orphans = o.Orphans[n:]
 	return droppedNodes
 }

@@ -1,13 +1,13 @@
 package node
 
 import (
-	"../../structs"
 	"fmt"
 	"net"
 	"net/rpc"
 	"time"
-)
 
+	"../../structs"
+)
 
 const HBTIMEOUT = 4
 const HBINTERVAL = 2
@@ -57,7 +57,7 @@ func PeerHeartbeat(id string, reply *string) error {
 	*reply = "ok"
 
 	// Check if peer is in map, then write to its heartbeat channel
-	peer, ok := getPeer(id)
+	peer, ok := PeerMap.Get(id)
 	if !ok {
 		*reply = "Disconnected error"
 		return fmt.Errorf("%s", *reply)
@@ -71,7 +71,7 @@ func PeerHeartbeat(id string, reply *string) error {
 // should already be established, and the peer's channel should already be put
 // into the PeerMap structure.
 func peerHbSender(id string) {
-	peer, ok := getPeer(id)
+	peer, ok := PeerMap.Get(id)
 	if !ok {
 		return
 	}
@@ -118,7 +118,7 @@ func peerHbSender(id string) {
 // sending any back.
 func peerHbHandler(id string) {
 	// Sanity checks - shouldn't ever happen
-	peer, ok := getPeer(id)
+	peer, ok := PeerMap.Get(id)
 	if !ok {
 		return
 	}
