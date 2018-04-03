@@ -26,7 +26,7 @@ const (
 
 var NodeMode Mode = Follower
 
-var PeerMap *sync.Map
+var PeerMap sync.Map
 
 var DirectFollowersList map[string]bool // ip -> true
 
