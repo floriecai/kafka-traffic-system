@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 	"math"
+	"net"
+	"net/rpc"
 )
 
 // Maximum number of seconds for consensus job to wait for before timeout error.
@@ -43,6 +45,7 @@ var nominationCompleteCh chan bool = make(chan bool, 1)
 
 var PotentialFollowerIps []string
 var receiveFollowerChannel chan string
+var MyAddr string
 
 // Initial entry point to the consensus protocol
 // Called when the leader heartbeat dstops
@@ -50,30 +53,44 @@ func StartConsensusProtocol() {
 
 	lowestFollowerIp, lowestFollowerId := ScanFollowerList()
 
+	// create Consensus job that returns an update channel and a channel for the func to receive followers on
+	var updateChannel chan bool
+
+	for len(DirectFollowersList) > 0 {
 	// case 1: we are the lowest follower and likely to become leader
-	if FollowerId == lowestFollowerId {
-		fmt.Println("Expecting to become leader")
+		if FollowerId == lowestFollowerId {
+			fmt.Println("Expecting to become leader")
 
-		electionLock.Lock()
-		electionInProgress = true
-		electionLock.Unlock()
+			electionLock.Lock()
+			electionInProgress = true
+			electionLock.Unlock()
 
-		// create Consensus job that returns an update channel and a channel for the func to receive followers on
-		var updateChannel chan bool
-		updateChannel, receiveFollowerChannel = StartElection()
-		// block on update channel
-		becameLeader := <- updateChannel
-		// when channel returns and it's true then start become leader protocol
-		// Assume PotentialFollowerIps was filled up
-		if becameLeader {
-			BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
-			// TODO: Notify server once you've become leader
-		}
+			updateChannel, receiveFollowerChannel = StartElection()
+			// block on update channel
+			becameLeader := <- updateChannel
+			// when channel returns and it's true then start become leader protocol
+			// Assume PotentialFollowerIps was filled up
 
-	// TODO: Make this an infinite loop until the follower list exhausted
-	} else {
+			electionLock.Lock()
+			electionInProgress = false
+			electionLock.Unlock()
+
+			if becameLeader {
+
+				BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
+				// TODO: Notify server once you've become leader
+				break
+			}
+		} else {
 	// case 2: we should connect to the lowest follower
-		fmt.Println("Try to follow this leader:", lowestFollowerIp)
+			fmt.Println("Try to follow this leader:", lowestFollowerIp)
+			updateChannel, receiveFollowerChannel = Nominate()
+
+			nominationAccepted := <- updateChannel
+			if nominationAccepted {
+				break
+			}
+		}
 	}
 
 }
@@ -180,49 +197,45 @@ func StartElection(myLatestNum int, myId string, numAcceptRequired int) {
 		}
 	}()
 }
-
-// Function CheckPeerNominateAccept should be called when a peer self-nomination is
-// received. This function will return true if it consents for that peer to be
-// the leader, and false otherwise
-func CheckPeerNominateAccept(peerLatestNum int, peerId string) bool {
-	electionLock.Lock()
-
-	// wait for accept if peerLatestNum is greatest - there could be
-	// another one yet to arrive that is greater.
-	// - condvar, and select on timeout
-	if peerLatestNum < chosenLeaderLatestNum {
-		electionLock.Unlock()
-		return false
-	} else if peerLatestNum == chosenLeaderLatestNum {
-		result := tieBreakLatestNum(peerId)
-		if !result {
-			electionLock.Unlock()
-			return false
-		}
-	}
-
-	// If reached here, the peerId is the chosen leader for now.
-	chosenLeaderLatestNum = peerLatestNum
-	chosenLeaderId = peerId
-	electionLock.Unlock()
-
-	electionUpdateCond.L.Lock()
-
-	for !electionComplete {
-		electionUpdateCond.Wait()
-
-		if peerId != chosenLeaderId {
-			electionUpdateCond.L.Unlock()
-			return false
-		}
-	}
-
-	electionUpdateCond.L.Unlock()
-
-	// check if chosenLeaderId is still peerId, and return the result
-	return (peerId == chosenLeaderId)
-}
 */
+// Function Nominate is called when the peer decides there is a leader
+// to join, it will return 2 channels, one for updating the status and one
+// for receiving the update from peer rpc
+func Nominate() (updateCh chan bool, receiveFollowerCh chan string) {
+	updateCh = make(chan bool, 32)
+	receiveFollowerCh = make(chan string, 32)
+	timeoutCh := createTimeout(ELECTION_WAIT_FOR_RESULTS)
+
+
+	go func() {
+		for {
+			select {
+			// Receive a new FollowMe
+			// end the election status
+			case <- receiveFollowerCh:
+				electionLock.Lock()
+				/////////////
+				updateCh <- true
+				/////////////
+				electionLock.Unlock()
+				return
+
+			case <- timeoutCh:
+				// Delete the channel from the map, but do not
+				// close (unsafe to do so). I trust the golang
+				// GC to clean this up once it's not in the map.
+				//dataChannels.Delete(datumNum)
+
+				// safe to close the timeout channel
+				close(timeoutCh)
+				updateCh <- false
+				return
+			}
+		}
+	}()
+	return updateCh, receiveFollowerCh
+}
+
 // Function PeerAcceptThisNode should be called if a peer has accepted that
 // this node should be leader. Currently is not responsible for ensuring that
 // each peer has only sent their acceptance once. (maybe it should be though)
@@ -276,6 +289,7 @@ func PeerAcceptThisNode(ip string) error {
 		// unlock
 
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
+		return nil
 	}
 
 }
@@ -345,8 +359,8 @@ func createTimeout(secs time.Duration) chan bool {
 
 // return the lowest follower's ID and the corresponding IP
 func ScanFollowerList() (lowestFollowerIp string, lowestFollowerId int) {
-	FollowerListLock.RLock()
-	defer FollowerListLock.RUnlock()
+	FollowerListLock.Lock()
+	defer FollowerListLock.Unlock()
 
 	lowestFollowerId = math.MaxInt32
 	lowestFollowerIp = ":0"
@@ -358,5 +372,6 @@ func ScanFollowerList() (lowestFollowerIp string, lowestFollowerId int) {
 			lowestFollowerIp = ip
 		}
 	}
+	delete(DirectFollowersList, lowestFollowerIp)
 	return lowestFollowerIp,lowestFollowerId
 }

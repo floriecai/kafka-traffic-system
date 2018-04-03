@@ -84,7 +84,7 @@ func (c PeerRpc) AddFollower(msg node.ModFollowerListMsg, _ignored *string) erro
 // Leader -> Node rpc that tells followers of nodes leaving
 func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) error {
 	err := node.ModifyFollowerList(msg, false)
-	return nil
+	return err
 }
 
 // Follower -> Leader rpc that is used to join this leader's cluster
