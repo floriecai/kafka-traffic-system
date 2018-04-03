@@ -8,6 +8,7 @@ A different app will be used to receive data from the distributed data queues.
 package main
 
 import (
+	"./lib"
 	"./movement"
 	"fmt"
 	"net"
@@ -25,7 +26,7 @@ var collectedPointsLock sync.Mutex
 func main() {
 	fmt.Println("This program connects to the data service as well as to an internal port for")
 	fmt.Println("sending data to a webserver.")
-	fmt.Println("Usage: go run <file> serv-ip serv-port internal-ip internal-port")
+	fmt.Println("Usage: go run <file> <serv-ip>:<serv-port> <internal-ip:internal-port>")
 	var files []string
 
 	root := "./testGraphs"
@@ -38,7 +39,7 @@ func main() {
 		panic(err)
 	}
 
-	internalConn, err := net.Dial("tcp", os.Args[3]+":"+os.Args[4])
+	internalConn, err := net.Dial("tcp", os.Args[2])
 	if err != nil {
 		fmt.Println("Could not connect to internal:", err)
 	}
@@ -54,10 +55,19 @@ func main() {
 		}
 
 		myId := producerNodeId
+		wSess, err := lib.OpenTopic("gps_coords", os.Args[1], fmt.Sprintf("Writer %d", myId))
+		if err != nil {
+			continue
+		}
+
 		fn := func(p movement.Point) {
 			fmt.Printf("ID%d: %.2f %.2f\n", myId, p.X, p.Y)
 			appendPoint(p)
-			internalConn.Write([]byte(fmt.Sprintf("%.2f %.2f\n", p.X, p.Y)))
+
+			datum := fmt.Sprintf("%.2f %.2f\n", p.X, p.Y)
+
+			internalConn.Write([]byte(datum))
+			wSess.Write(datum)
 		}
 
 		producerNodeId++
@@ -71,7 +81,6 @@ func main() {
 	}
 
 	time.Sleep(10 * time.Second)
-	printAllPoints()
 }
 
 // Use this to atomically append a point to the global point slice
