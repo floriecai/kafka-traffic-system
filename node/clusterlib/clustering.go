@@ -59,12 +59,13 @@ var DirectFollowersList map[string]int // ip -> followerID
 // Global incrementer for follower ID
 // For followers this will be a static value of the assigned follower ID
 var FollowerId int = 0
-
 var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
 
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
+	// reference addr for consensus.go
+	MyAddr = LeaderAddr
 	DirectFollowersList = make(map[string]int)
 	NodeMode = Leader
 
@@ -144,6 +145,10 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 	}
 
 	LeaderConn = rpc.NewClient(conn)
+
+	if receiveFollowerChannel != nil {
+		receiveFollowerChannel <- msg.LeaderIp
+	}
 	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler, 0)
 
 	return err

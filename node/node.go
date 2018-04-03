@@ -121,14 +121,15 @@ func (c PeerRpc) AddFollower(msg node.ModFollowerListMsg, _ignored *string) erro
 
 // Leader -> Node rpc that tells followers of nodes leaving
 func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) error {
-
-	return nil
+	err := node.ModifyFollowerList(msg, false)
+	return err
 }
 
 // Follower -> Leader rpc that is used to join this leader's cluster
-func (c PeerRpc) Follow(_ignored1 string, _ignored2 *string) error {
-	//TODO:
-	return nil
+// Used during the election process when attempting to connect to this leader
+func (c PeerRpc) Follow(ip string, _ignored2 *string) error {
+	err := node.PeerAcceptThisNode(ip)
+	return err
 }
 
 // Follower -> Follower rpc that is used by the caller to become a peer of this node
