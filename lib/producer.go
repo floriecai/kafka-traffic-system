@@ -5,10 +5,11 @@ This file contains functions that should be used by producer clients.
 package lib
 
 import (
-	"../structs"
 	"fmt"
 	"net"
 	"net/rpc"
+
+	"../structs"
 )
 
 type DisconnectedError string
@@ -113,10 +114,10 @@ func connectToLeader(topicData structs.Topic, myId string) (*WriteSession, error
 	fmt.Println("Attempting to connect to leader")
 	// There should only be one leader in the current implementation, so
 	// only attempt the 0th index.
-	conn, err := net.Dial("tcp", topicData.Leaders[0].Address)
+	conn, err := net.Dial("tcp", topicData.Leaders[0])
 	if err != nil {
 		fmt.Printf("Could not connect to leader %s of topic %s\n",
-			topicData.TopicName, topicData.Leaders[0].Address)
+			topicData.TopicName, topicData.Leaders[0])
 		return nil, ConnectionError(err.Error())
 	}
 
@@ -125,7 +126,7 @@ func connectToLeader(topicData structs.Topic, myId string) (*WriteSession, error
 		return nil, ConnectionError("rpc.NewClient failed")
 	}
 
-	fmt.Println("Successfully connected to leader:", topicData.Leaders[0].Address)
+	fmt.Println("Successfully connected to leader:", topicData.Leaders)
 	return &WriteSession{
 		topicData.TopicName,
 		myId,

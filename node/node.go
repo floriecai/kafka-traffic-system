@@ -18,8 +18,6 @@ type PeerRpc struct {
 
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
-var FollowerMap map[string]*rpc.Client // ipAddr -> rpcClient
-
 /*******************************
 | Cluster RPC Calls
 ********************************/
@@ -109,9 +107,6 @@ func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 ********************************/
 func main() {
 	serverIP := os.Args[1]
-
-	// Initiate data structures
-	FollowerMap = make(map[string]*rpc.Client)
 
 	PublicIp = node.GeneratePublicIP()
 	fmt.Println("The public IP is:", PublicIp)
