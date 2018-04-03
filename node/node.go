@@ -65,30 +65,8 @@ func ListenPeerRpc(ln net.Listener) {
 // Server -> Node rpc that sets that node as a leader
 // When it returns the node will have been established as leader
 func (c PeerRpc) Lead(ips []string, _ignored *string) error {
-	if err := node.BecomeLeader(ips, PeerRpcAddr); err != nil {
-		return err
-	}
-
-	// Florie said to remove this for now
-	//	for _, ip := range ips {
-	//		req := node.FollowMeMsg{
-	//			LeaderIp:    PeerRpcAddr,
-	//			FollowerIps: ips,
-	//		}
-	//
-	//		followerClient, err := rpc.Dial("tcp", ip)
-	//		if err != nil {
-	//			return err
-	//		}
-	//
-	//		if err = followerClient.Call("Peer.FollowMe", req, _ignored); err != nil {
-	//			return err
-	//		}
-	//
-	//		FollowerMap[ip] = followerClient
-	//	}
-
-	return nil
+	err := node.BecomeLeader(ips, PeerRpcAddr)
+	return err
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader
@@ -98,12 +76,14 @@ func (c PeerRpc) FollowMe(msg node.FollowMeMsg, _ignored *string) error {
 }
 
 // Leader -> Node rpc that tells followers of new joining nodes
-func (c PeerRpc) AddFollower(msg []string, _ignored *string) error {
-	return nil
+func (c PeerRpc) AddFollower(msg node.ModFollowerListMsg, _ignored *string) error {
+	err := node.ModifyFollowerList(msg, true)
+	return err
 }
 
 // Leader -> Node rpc that tells followers of nodes leaving
-func (c PeerRpc) RemoveFollower(msg []string, _ignored *string) error {
+func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) error {
+
 	return nil
 }
 

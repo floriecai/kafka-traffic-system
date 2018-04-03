@@ -4,5 +4,11 @@ package node
 
 type FollowMeMsg struct {
 	LeaderIp string
-	FollowerIps []string
+	FollowerIps map[string]int
+	YourId int
+}
+
+type ModFollowerListMsg struct {
+	FollowerIp string
+	FollowerId int
 }
