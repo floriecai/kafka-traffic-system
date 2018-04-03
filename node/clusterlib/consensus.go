@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"math"
 )
 
 // Maximum number of seconds for consensus job to wait for before timeout error.
@@ -26,9 +27,6 @@ const ELECTION_COMPLETE_TIMEOUT = 5
 
 // Number of seconds to wait after election complete to let results come in
 const ELECTION_WAIT_FOR_RESULTS = 10
-
-// TODO: replace this with proper types in the proper places
-type TODO struct{}
 
 var dataChannels sync.Map
 
@@ -43,10 +41,49 @@ var chosenLeaderId string
 var chosenLeaderLatestNum int
 var nominationCompleteCh chan bool = make(chan bool, 1)
 
+var PotentialFollowerIps []string
+var receiveFollowerChannel chan string
+
+// Initial entry point to the consensus protocol
+// Called when the leader heartbeat dstops
+func StartConsensusProtocol() {
+
+	lowestFollowerIp, lowestFollowerId := ScanFollowerList()
+
+	// case 1: we are the lowest follower and likely to become leader
+	if FollowerId == lowestFollowerId {
+		fmt.Println("Expecting to become leader")
+
+		electionLock.Lock()
+		electionInProgress = true
+		electionLock.Unlock()
+
+		// create Consensus job that returns an update channel and a channel for the func to receive followers on
+		var updateChannel chan bool
+		updateChannel, receiveFollowerChannel = createConsensusJob()
+		// block on update channel
+		becameLeader := <- updateChannel
+		// when channel returns and it's true then start become leader protocol
+		// Assume PotentialFollowerIps was filled up
+		if becameLeader {
+			BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
+			// TODO: Notify server once you've become leader
+		}
+
+	// TODO: Make this an infinite loop until the follower list exhausted
+	} else {
+	// case 2: we should connect to the lowest follower
+		fmt.Println("Try to follow this leader:", lowestFollowerIp)
+	}
+
+}
+
+
 // Function WriteAfterConsent will start a consensus job, which will write to
 // disk and propagate the confirmation of the data for the datumNum provided if
 // consensus is reached.
-func WriteAfterConsent(numFollowers int, datum TODO, datumNum int) {
+/*
+func WriteAfterConsent(numFollowers int, datumNum int) {
 	fn := func() {
 		fmt.Printf("Wrote datumNum %d\n", datumNum)
 		//WriteToFile(datum)
@@ -203,55 +240,50 @@ func PeerAcceptThisNode() {
 		}
 	}
 }
-
+*/
 // This function starts a consensus job. A caller should update the job when
 // new messages are received using the update channel. The function parameter
 // fn will be called if there is a consensus reached. Consensus is considered
 // successful when there are a number of writes to the updateChannel that is
 // at least half of numFollowers.
-func createConsensusJob(numFollowers int, timeout time.Duration, fn func(), datumNum int) (updateChannel chan<- bool) {
-	uCh := make(chan bool, 32)
-
-	timeoutCh := createTimeout(timeout)
+func createConsensusJob() (updateCh chan bool, receiveFollowerCh chan string) {
+	updateCh = make(chan bool, 32)
+	receiveFollowerCh = make(chan string, 32)
+	timeoutCh := createTimeout(ELECTION_WAIT_FOR_RESULTS)
 
 	go func() {
-		// Function will keep track of number accepted and rejected
-		numAccepted := 0
-		numRejected := 0
-		done := (numFollowers / 2) + (numFollowers % 2)
-
 		for {
 			select {
-			case accepted := <-uCh:
-				if accepted {
-					numAccepted += 1
-					if numAccepted >= done {
-						fn()
-					}
-				} else {
-					numRejected += 1
-					if numRejected >= done {
-						// Currently does nothing if a datum
-						// is rejected. It should probably do
-						// something though, like ask if its
-						// peers think it is the leader.
-						fmt.Printf("DATUM %d rejected\n", datumNum)
-					}
+			// Receive a new FollowerIp
+			// Add it to potential followers list
+			// if we have enough then we end the election process
+			case follower := <- receiveFollowerCh:
+				electionLock.Lock()
+				/////////////
+				PotentialFollowerIps = append(PotentialFollowerIps, follower)
+				if len(PotentialFollowerIps) >= int(MinConnections) {
+					updateCh <- true
+					electionLock.Unlock()
+					return
 				}
-			case <-timeoutCh:
+				/////////////
+				electionLock.Unlock()
+
+			case <- timeoutCh:
 				// Delete the channel from the map, but do not
 				// close (unsafe to do so). I trust the golang
 				// GC to clean this up once it's not in the map.
-				dataChannels.Delete(datumNum)
+				//dataChannels.Delete(datumNum)
 
 				// safe to close the timeout channel
 				close(timeoutCh)
+				updateCh <- false
 				return
 			}
 		}
 	}()
 
-	return uCh
+	return updateCh, receiveFollowerCh
 }
 
 // Function tieBreakLatestNum contains the logic to choose whether or not a
@@ -271,4 +303,22 @@ func createTimeout(secs time.Duration) chan bool {
 	}()
 
 	return timeout
+}
+
+// return the lowest follower's ID and the corresponding IP
+func ScanFollowerList() (lowestFollowerIp string, lowestFollowerId int) {
+	FollowerListLock.RLock()
+	defer FollowerListLock.RUnlock()
+
+	lowestFollowerId = math.MaxInt32
+	lowestFollowerIp = ":0"
+
+	// Scan for lowest follower ID
+	for ip, id := range DirectFollowersList {
+		if id < lowestFollowerId {
+			lowestFollowerId = id
+			lowestFollowerIp = ip
+		}
+	}
+	return lowestFollowerIp,lowestFollowerId
 }

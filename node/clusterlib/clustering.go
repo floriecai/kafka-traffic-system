@@ -29,7 +29,11 @@ var NodeMode Mode = Follower
 var PeerMap *sync.Map
 
 var DirectFollowersList map[string]int // ip -> followerID
-var FollowerId int = 0 // Global incrementer for follower ID
+// Global incrementer for follower ID
+// For followers this will be a static value of the assigned follower ID
+var FollowerId int = 0 
+
+
 var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
@@ -237,6 +241,8 @@ func NodeDeathHandler(ip string) {
 		if ip == LEADER_ID {
 			//TODO initiate consensus protocol
 			fmt.Println("The leader has died, initiating consensus protocol")
+			// consensus.go
+			StartConsensusProtocol()
 		} else {
 			//TODO react to death of other peers
 			fmt.Println("Other peer has died, need to notify leader >>TODO<<")
