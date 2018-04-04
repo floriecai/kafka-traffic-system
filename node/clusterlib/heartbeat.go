@@ -53,15 +53,17 @@ func ServerHeartBeat(addr string) {
 }
 
 // Logic of the heartbeat function
-func PeerHeartbeat(id string, reply *string) error {
+func PeerHeartbeat(ip string, reply *string, id int) error {
 	*reply = "ok"
 
 	// Check if peer is in map, then write to its heartbeat channel
-	peer, ok := PeerMap.Get(id)
+	peer, ok := PeerMap.Get(ip)
 	if !ok {
-		*reply = "Disconnected error"
+		fmt.Println(id,": could not find", ip)
+		*reply = "Disconnected Error" + ip
 		return fmt.Errorf("%s", *reply)
 	}
+	fmt.Println(id,": was successful")
 	peer.HbChan <- "hb"
 
 	return nil
@@ -81,8 +83,8 @@ func peerHbSender(id string) {
 	// before it starts waiting on timeout to complete
 	timeout := createPeerTimeout(HBINTERVAL)
 
-	for true {
-		arg := id
+	for {
+		arg := MyAddr
 		var reply string
 
 		call := peer.PeerConn.Go("Peer.Heartbeat", arg, &reply, nil)
@@ -99,7 +101,7 @@ func peerHbSender(id string) {
 			return
 		case <-call.Done:
 			if call.Error != nil {
-				fmt.Printf("Peer.Heartbeat error: %s\n", reply)
+				fmt.Printf("Peer.Heartbeat error: %s\n", call.Error)
 				peer.HbChan <- "die"
 				return
 			}
@@ -136,7 +138,7 @@ func peerHbHandler(id string) {
 	}()
 
 	// Heartbeat checking loop - does not exit until a peer disconnects
-	for true {
+	for {
 		timeout := createTimeout(HBTIMEOUT)
 
 		select {

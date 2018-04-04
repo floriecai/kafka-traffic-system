@@ -44,7 +44,7 @@ func (pm *PeerCMap) Delete(k string) {
 
 ///////////// Map functions for concurrent Peer Map //////////////////
 
-const LEADER_ID = "leader"
+var LEADER_ID string = "leader"
 
 const (
 	Follower Mode = iota
@@ -117,9 +117,10 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	return err
 }
 
-func FollowLeader(msg FollowMeMsg) (err error) {
+func FollowLeader(msg FollowMeMsg, addr string) (err error) {
 	DirectFollowersList = msg.FollowerIps
 	FollowerId = msg.YourId
+	MyAddr = addr
 
 	LocalAddr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
@@ -149,6 +150,8 @@ func FollowLeader(msg FollowMeMsg) (err error) {
 	if receiveFollowerChannel != nil {
 		receiveFollowerChannel <- msg.LeaderIp
 	}
+
+	LEADER_ID = msg.LeaderIp
 	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler, 0)
 
 	return err
@@ -208,7 +211,7 @@ func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 	go peerHbHandler(ip)
 
 	if NodeMode == Leader {
-		go AddToFollowerLists(ip, id)
+		//go AddToFollowerLists(ip, id)
 	}
 }
 

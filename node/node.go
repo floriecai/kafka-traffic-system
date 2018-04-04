@@ -23,6 +23,7 @@ type PeerRpc struct {
 
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
+var id int = 0
 /*******************************
 | Cluster RPC Calls
 ********************************/
@@ -102,14 +103,15 @@ func ListenPeerRpc(ln net.Listener) {
 
 // Server -> Node rpc that sets that node as a leader
 // When it returns the node will have been established as leader
-func (c PeerRpc) Lead(ips []string, _ignored *string) error {
+func (c PeerRpc) Lead(ips []string, clusterAddr *string) error {
 	err := node.BecomeLeader(ips, PeerRpcAddr)
+	*clusterAddr = ClusterRpcAddr
 	return err
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader
 func (c PeerRpc) FollowMe(msg node.FollowMeMsg, _ignored *string) error {
-	err := node.FollowLeader(msg)
+	err := node.FollowLeader(msg, PeerRpcAddr)
 	return err
 }
 
@@ -140,7 +142,9 @@ func (c PeerRpc) Connect(_ignored1 string, _ignored2 *string) error {
 
 // Node -> Node RPC that is used to notify of liveliness
 func (c PeerRpc) Heartbeat(ip string, reply *string) error {
-	return node.PeerHeartbeat(ip, reply)
+	id += 1
+	fmt.Println("hb from:", ip, id)
+	return node.PeerHeartbeat(ip, reply, id)
 }
 
 // Leader -> Follower RPC to commit write

@@ -215,8 +215,8 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				orphanIps = append(orphanIps, orphan.Address)
 			}
 
-			var ignore string
-			if err := node.Client.Call("Peer.Lead", orphanIps, &ignore); err != nil {
+			var leaderClusterRpc string
+			if err := node.Client.Call("Peer.Lead", orphanIps, &leaderClusterRpc); err != nil {
 				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
 				return err
 			}
@@ -226,7 +226,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 			topic := structs.Topic{
 				TopicName:   *topicName,
 				MinReplicas: config.NodeSettings.MinNumNodeConnections,
-				Leaders:     orphanIps[:1],
+				Leaders:     []string{leaderClusterRpc},
 				Followers:   orphanIps[1:]}
 
 			topics.Set(*topicName, topic)
