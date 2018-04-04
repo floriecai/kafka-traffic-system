@@ -170,7 +170,9 @@ func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
 	} else {
 		if !(DirectFollowersList[follower.FollowerIp] > 0) {
 			err = errors.New("Clustering: Follower is not known. Cannot remove follower")
+			fmt.Println(err.Error())
 		} else {
+			fmt.Printf("Removing %s from follower list\n", follower.FollowerIp)
 			delete(DirectFollowersList, follower.FollowerIp)
 		}
 	}
