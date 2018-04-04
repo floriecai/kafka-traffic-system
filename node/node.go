@@ -143,7 +143,7 @@ func (c PeerRpc) Connect(_ignored1 string, _ignored2 *string) error {
 // Node -> Node RPC that is used to notify of liveliness
 func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 	id += 1
-	fmt.Println("hb from:", ip, id)
+	//fmt.Println("hb from:", ip, id)
 	return node.PeerHeartbeat(ip, reply, id)
 }
 
