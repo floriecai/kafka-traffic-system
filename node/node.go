@@ -24,6 +24,7 @@ type PeerRpc struct {
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
 var id int = 0
+
 /*******************************
 | Cluster RPC Calls
 ********************************/
