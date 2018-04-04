@@ -58,7 +58,7 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 				Data:       write.Data,
 			}
 
-			if err := peer.PeerConn.Call("PeerRpc.ConfirmWrite", resp, &writeConfirmed); err != nil {
+			if err := peer.PeerConn.Call("Peer.ConfirmWrite", resp, &writeConfirmed); err != nil {
 				log.Println("Error in Write to Peer: [%d]", ip)
 				checkError(err, "WriteToCluster")
 			}
