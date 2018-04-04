@@ -84,6 +84,7 @@ func StartConsensusProtocol() {
 		} else {
 	// case 2: we should connect to the lowest follower
 			fmt.Println("Try to follow this leader:", lowestFollowerIp)
+			time.Sleep(time.Second)
 			updateChannel, receiveFollowerChannel = Nominate()
 			// TODO: send follow rpc to lowestFollowerIp
 			go PeerFollowThatNode(lowestFollowerIp)
@@ -204,7 +205,7 @@ func StartElection(myLatestNum int, myId string, numAcceptRequired int) {
 func Nominate() (updateCh chan bool, receiveFollowerCh chan string) {
 	updateCh = make(chan bool, 32)
 	receiveFollowerCh = make(chan string, 32)
-	timeoutCh := createTimeout(ELECTION_WAIT_FOR_RESULTS)
+	timeoutCh := createTimeout(ELECTION_COMPLETE_TIMEOUT)
 
 
 	go func() {
@@ -246,7 +247,7 @@ func PeerAcceptThisNode(ip string) error {
 	if electionInProgress {
 		receiveFollowerChannel <- ip
 		return nil
-	} else {		
+	} else if NodeMode == Leader {
 		// from clustering.go
 		// it's likely this cluster is trying to join after
 		// an election so just accept it
@@ -290,6 +291,8 @@ func PeerAcceptThisNode(ip string) error {
 
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
 		return nil
+	} else {
+		return fmt.Errorf(MyAddr, "is not a leader")
 	}
 
 }
@@ -334,7 +337,7 @@ func PeerFollowThatNode(ip string) error {
 // at least the min connections needed for a cluster
 func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 	updateCh = make(chan bool, 32)
-	receiveFollowerCh = make(chan string, 32)
+	receiveFollowerCh = make(chan string, 1)
 	timeoutCh := createTimeout(ELECTION_WAIT_FOR_RESULTS)
 
 	go func() {
@@ -347,6 +350,7 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 				electionLock.Lock()
 				/////////////
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
+				fmt.Println("added follower:", follower)
 				if len(PotentialFollowerIps) >= int(MinConnections) {
 					updateCh <- true
 					electionLock.Unlock()

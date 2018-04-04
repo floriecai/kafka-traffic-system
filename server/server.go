@@ -208,7 +208,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 			orphanNodes.Lock()
 			defer orphanNodes.Unlock()
 			for i, orphan := range orphanNodes.Orphans {
-				if i >= int(config.MinClusterSize) {
+				if i >= int(config.MinClusterSize) * 2 {
 					break
 				}
 

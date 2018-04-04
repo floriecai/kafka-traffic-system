@@ -165,6 +165,7 @@ func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
 		if DirectFollowersList[follower.FollowerIp] > 0 {
 			err = errors.New("Clustering: Follower is already known")
 		} else {
+			fmt.Printf("Adding %s from follower list\n", follower.FollowerIp)
 			DirectFollowersList[follower.FollowerIp] = follower.FollowerId
 		}
 	} else {
