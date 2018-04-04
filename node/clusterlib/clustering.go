@@ -213,14 +213,14 @@ func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 	go peerHbHandler(ip)
 
 	if NodeMode == Leader {
-		//go AddToFollowerLists(ip, id)
+		go AddToFollowerLists(ip, id)
 	}
 }
 
 func AddToFollowerLists(ip string, id int) {
 	FollowerListLock.RLock()
 	defer FollowerListLock.RUnlock()
-	var _ignored bool
+	var _ignored string
 	msg := ModFollowerListMsg{ip, id}
 	// send an add to follower list rpc to every follower
 	for ip, _ := range DirectFollowersList {
@@ -236,7 +236,7 @@ func AddToFollowerLists(ip string, id int) {
 func RemoveFromFollowerLists(ip string, id int) {
 	FollowerListLock.RLock()
 	defer FollowerListLock.RUnlock()
-	var _ignored bool
+	var _ignored string
 	msg := ModFollowerListMsg{ip, id}
 	// send an add to follower list rpc to every follower
 	for ip, _ := range DirectFollowersList {
