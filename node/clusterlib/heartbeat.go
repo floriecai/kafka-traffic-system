@@ -59,11 +59,11 @@ func PeerHeartbeat(ip string, reply *string, id int) error {
 	// Check if peer is in map, then write to its heartbeat channel
 	peer, ok := PeerMap.Get(ip)
 	if !ok {
-		fmt.Println(id,": could not find", ip)
+		//fmt.Println(id,": could not find", ip)
 		*reply = "Disconnected Error" + ip
 		return fmt.Errorf("%s", *reply)
 	}
-	fmt.Println(id,": was successful")
+	//fmt.Println(id,": was successful")
 	peer.HbChan <- "hb"
 
 	return nil
