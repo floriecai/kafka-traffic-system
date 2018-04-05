@@ -189,7 +189,7 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
-		if orphanNodes.Len >= config.NodeSettings.ClusterSize {
+		if orphanNodes.Len >= uint32(config.NodeSettings.ClusterSize) {
 			orphanNodes.Lock()
 			lNode := orphanNodes.Orphans[0]
 			orphanNodes.Unlock()
