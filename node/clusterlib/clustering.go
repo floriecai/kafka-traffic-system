@@ -256,23 +256,6 @@ func RemoveFromFollowerLists(ip string, id int) {
 	}
 }
 
-// Retrieve a peer from sync.Map - does the checking. ok will say whether
-// or not a peer was successfully retrieved.
-// func getPeer(ip string) (peer *Peer, ok bool) {
-// 	// Check if peer in the map and do type assertion
-// 	val, ok := PeerMap.Load(ip)
-// 	if !ok {
-// 		return nil, false
-// 	}
-// 	p, ok := val.(Peer)
-// 	if !ok {
-// 		fmt.Println("CRITICAL ERROR: TYPE ASSERTION FAILED")
-// 		return nil, false
-// 	}
-
-// 	return &p, true
-// }
-
 func NodeDeathHandler(ip string) {
 	// This is the death function in the case that this peer
 	// dies. There will be more functionality added to this
