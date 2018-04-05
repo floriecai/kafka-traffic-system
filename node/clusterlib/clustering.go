@@ -93,6 +93,8 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 
 		var _ignored string
 
+		addPeer(ip, client, NodeDeathHandler, FollowerId)
+
 		FollowerListLock.RLock()
 		////////////////////////////
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
@@ -110,9 +112,9 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		FollowerListLock.Lock()
 		DirectFollowersList[ip] = FollowerId
 		FollowerListLock.Unlock()
-		// unlock
 
-		addPeer(ip, client, NodeDeathHandler, FollowerId)
+		startPeerHb(ip)
+		// unlock
 	}
 	return err
 }
@@ -153,6 +155,7 @@ func FollowLeader(msg FollowMeMsg, addr string) (err error) {
 
 	LEADER_ID = msg.LeaderIp
 	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler, 0)
+	startPeerHb(LEADER_ID)
 
 	return err
 }
@@ -205,17 +208,20 @@ func checkError(err error, parent string) bool {
 	return false
 }
 
-// Adds a peer to the map and starts a heartbeat checking procedure for it.
+// Adds a peer to the map
 func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
 	PeerMap.Set(ip, newPeer)
 
-	go peerHbSender(ip)
-	go peerHbHandler(ip)
-
 	if NodeMode == Leader {
 		go AddToFollowerLists(ip, id)
 	}
+}
+
+// Starts heartbeat to a peer
+func startPeerHb(ip string) {
+	go peerHbSender(ip)
+	go peerHbHandler(ip)
 }
 
 func AddToFollowerLists(ip string, id int) {
