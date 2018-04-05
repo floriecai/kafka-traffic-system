@@ -59,9 +59,8 @@ func PeerHeartbeat(ip string, reply *string, id int) error {
 	// Check if peer is in map, then write to its heartbeat channel
 	peer, ok := PeerMap.Get(ip)
 	if !ok {
-		//fmt.Println(id,": could not find", ip)
-		*reply = "Disconnected Error" + ip
-		return fmt.Errorf("%s", *reply)
+		fmt.Println("PeerHeartbeat: could not find", ip)
+		return fmt.Errorf("%s not in peer list", ip)
 	}
 	//fmt.Println(id,": was successful")
 	peer.HbChan <- "hb"
@@ -87,6 +86,7 @@ func peerHbSender(id string) {
 		arg := MyAddr
 		var reply string
 
+		fmt.Printf("Sending Peer.Heartbeat, arg is %s\n", arg)
 		call := peer.PeerConn.Go("Peer.Heartbeat", arg, &reply, nil)
 		if call == nil {
 			// connection is dead - error
@@ -133,7 +133,7 @@ func peerHbHandler(id string) {
 		PeerMap.Delete(id)
 		peer.PeerConn.Close()
 
-		fmt.Printf("Peer %s connection has died!", id)
+		fmt.Printf("Peer %s connection has died, calling DeathFn\n", id)
 		peer.DeathFn(id)
 	}()
 
@@ -151,6 +151,7 @@ func peerHbHandler(id string) {
 				// Peer failure by another function, exit
 				return
 			case "hb":
+				fmt.Printf("HbHandler: received hb from <%s>\n", id)
 				continue
 			}
 		}

@@ -22,13 +22,13 @@ import (
 )
 
 // Maximum number of seconds for consensus job to wait for before timeout error.
-const DATUM_CONSENSUS_TIMEOUT = 10
+const ELECTION_ATTEMPT_FOLLOW_WAIT = 2
 
 // Number of seconds to wait until election is considered complete
-const ELECTION_COMPLETE_TIMEOUT = 5
+const ELECTION_COMPLETE_TIMEOUT = 8
 
 // Number of seconds to wait after election complete to let results come in
-const ELECTION_WAIT_FOR_RESULTS = 10
+const ELECTION_WAIT_FOR_RESULTS = 16
 
 var dataChannels sync.Map
 
@@ -50,6 +50,7 @@ var MyAddr string
 // Initial entry point to the consensus protocol
 // Called when the leader heartbeat dstops
 func StartConsensusProtocol() {
+	fmt.Println("ELECTION STARTED: my follower id is", FollowerId)
 
 	// create Consensus job that returns an update channel and a channel for the func to receive followers on
 	var updateChannel chan bool
@@ -58,7 +59,8 @@ func StartConsensusProtocol() {
 		lowestFollowerIp, lowestFollowerId := ScanFollowerList()
 		// case 1: we are the lowest follower and likely to become leader
 		if FollowerId == lowestFollowerId {
-			fmt.Println("Expecting to become leader")
+			fmt.Printf("Expecting to become leader, follower id is %d, ip is %s\n\n",
+				FollowerId, lowestFollowerIp)
 
 			electionLock.Lock()
 			electionInProgress = true
@@ -75,21 +77,23 @@ func StartConsensusProtocol() {
 			electionLock.Unlock()
 
 			if becameLeader {
-				fmt.Println("became the new Leader")
+				fmt.Println("ELECTION COMPLETE: became the new Leader, my IP is", lowestFollowerIp)
 				BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
 				// TODO: Notify server once you've become leader
 				break
 			}
 		} else {
 			// case 2: we should connect to the lowest follower
-			fmt.Println("Try to follow this leader:", lowestFollowerIp)
-			time.Sleep(time.Second)
-			updateChannel, receiveFollowerChannel = Nominate()
+			time.Sleep(ELECTION_ATTEMPT_FOLLOW_WAIT * time.Second)
+			fmt.Printf("Try to follow this leader: %s\n\n", lowestFollowerIp)
 			// TODO: send follow rpc to lowestFollowerIp
-			go PeerFollowThatNode(lowestFollowerIp)
-			nominationAccepted := <-updateChannel
-			if nominationAccepted {
+			err := PeerFollowThatNode(lowestFollowerIp)
+			if err == nil {
+				// FIXME: election not actually complete?
+				fmt.Printf("ELECTION COMPLETE: following %s\n\n", lowestFollowerIp)
 				break
+			} else {
+				fmt.Printf("Could not follow node %s\n\n", lowestFollowerIp)
 			}
 		}
 	}
@@ -118,11 +122,6 @@ func Nominate() (updateCh chan bool, receiveFollowerCh chan string) {
 				return
 
 			case <-timeoutCh:
-				// Delete the channel from the map, but do not
-				// close (unsafe to do so). I trust the golang
-				// GC to clean this up once it's not in the map.
-				//dataChannels.Delete(datumNum)
-
 				// safe to close the timeout channel
 				close(timeoutCh)
 				updateCh <- false
@@ -165,13 +164,14 @@ func PeerAcceptThisNode(ip string) error {
 		client := rpc.NewClient(conn)
 
 		var _ignored string
+		addPeer(ip, client, NodeDeathHandler, FollowerId)
 
 		FollowerListLock.RLock()
 		////////////////////////////
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
 		FollowerId += 1
 		msg := FollowMeMsg{MyAddr, DirectFollowersList, FollowerId}
-		fmt.Printf("Telling node with ip %s to follow me\n", ip)
+		fmt.Printf("Telling node with ip %s to follow me\n\n", ip)
 		err = client.Call("Peer.FollowMe", msg, &_ignored)
 		////////////////////////////
 		FollowerListLock.RUnlock()
@@ -185,10 +185,10 @@ func PeerAcceptThisNode(ip string) error {
 		FollowerListLock.Unlock()
 		// unlock
 
-		addPeer(ip, client, NodeDeathHandler, FollowerId)
 		startPeerHb(ip)
 		return nil
 	} else {
+		fmt.Println("Peer tried to connect to me, but am not leader and no election in progress")
 		return fmt.Errorf(MyAddr, "is not a leader")
 	}
 
@@ -216,9 +216,9 @@ func PeerFollowThatNode(ip string) error {
 	}
 
 	client := rpc.NewClient(conn)
+	defer client.Close()
 
 	var _ignored string
-	fmt.Printf("Telling node with ip %s that I want to follow him\n", ip)
 	err = client.Call("Peer.Follow", MyAddr, &_ignored)
 	if err != nil {
 		return err
@@ -246,7 +246,7 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 				electionLock.Lock()
 				/////////////
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
-				fmt.Println("added follower:", follower)
+				fmt.Println("Added follower:", follower)
 				if len(PotentialFollowerIps) >= int(MinConnections)-2 {
 					updateCh <- true
 					electionLock.Unlock()
@@ -256,11 +256,6 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 				electionLock.Unlock()
 
 			case <-timeoutCh:
-				// Delete the channel from the map, but do not
-				// close (unsafe to do so). I trust the golang
-				// GC to clean this up once it's not in the map.
-				//dataChannels.Delete(datumNum)
-
 				// safe to close the timeout channel
 				close(timeoutCh)
 				updateCh <- false
@@ -270,13 +265,6 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 	}()
 
 	return updateCh, receiveFollowerCh
-}
-
-// Function tieBreakLatestNum contains the logic to choose whether or not a
-// peer ID is better than the current one
-func tieBreakLatestNum(peerId string) bool {
-	// TODO: what to do here
-	return false
 }
 
 // Starts a goroutine that will write to the returned channel in <secs> seconds.
@@ -291,13 +279,18 @@ func createTimeout(secs time.Duration) chan bool {
 	return timeout
 }
 
-// return the lowest follower's ID and the corresponding IP
+// Return the lowest follower's ID and the corresponding IP. Also removes
+// the returned ID and IP from the list.
 func ScanFollowerList() (lowestFollowerIp string, lowestFollowerId int) {
 	FollowerListLock.Lock()
 	defer FollowerListLock.Unlock()
 
 	lowestFollowerId = math.MaxInt32
 	lowestFollowerIp = ":0"
+
+	for ip, id := range DirectFollowersList {
+		fmt.Printf("ScanFollowerList: %s %d\n", ip, id)
+	}
 
 	// Scan for lowest follower ID
 	for ip, id := range DirectFollowersList {

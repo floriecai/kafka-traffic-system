@@ -95,22 +95,21 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
 
-		FollowerListLock.RLock()
+		// Write lock when modifying the direct followers list
+		FollowerListLock.Lock()
+		DirectFollowersList[ip] = FollowerId
 		////////////////////////////
+
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
-		FollowerId++
 		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
 		err = client.Call("Peer.FollowMe", msg, &_ignored)
-		////////////////////////////
-		FollowerListLock.RUnlock()
 		if err != nil {
 			continue
 		}
 
-		// Write lock when modifying the direct followers list
-		FollowerListLock.Lock()
-		DirectFollowersList[ip] = FollowerId
+		FollowerId++
+		////////////////////////////
 		FollowerListLock.Unlock()
 
 		startPeerHb(ip)
@@ -120,7 +119,10 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 }
 
 func FollowLeader(msg FollowMeMsg, addr string) (err error) {
+	fmt.Printf("FollowLeader: told to follow %s\n", msg.LeaderIp)
+	FollowerListLock.Lock()
 	DirectFollowersList = msg.FollowerIps
+	FollowerListLock.Unlock()
 	FollowerId = msg.YourId
 	MyAddr = addr
 
@@ -134,8 +136,6 @@ func FollowLeader(msg FollowMeMsg, addr string) (err error) {
 		return err
 	}
 
-	fmt.Printf("I am following the leader with ip %s now\n", msg.LeaderIp)
-
 	conn, err := net.DialTCP("tcp", LocalAddr, PeerAddr)
 	if err != nil {
 		return err
@@ -148,7 +148,6 @@ func FollowLeader(msg FollowMeMsg, addr string) (err error) {
 	}
 
 	LeaderConn = rpc.NewClient(conn)
-
 	if receiveFollowerChannel != nil {
 		receiveFollowerChannel <- msg.LeaderIp
 	}
@@ -168,7 +167,7 @@ func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
 		if DirectFollowersList[follower.FollowerIp] > 0 {
 			err = errors.New("Clustering: Follower is already known")
 		} else {
-			fmt.Printf("Adding %s from follower list\n", follower.FollowerIp)
+			fmt.Printf("Adding %s to follower list\n", follower.FollowerIp)
 			DirectFollowersList[follower.FollowerIp] = follower.FollowerId
 		}
 	} else {
@@ -210,6 +209,7 @@ func checkError(err error, parent string) bool {
 
 // Adds a peer to the map
 func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
+	fmt.Printf("Adding %s to peer list\n", ip)
 	newPeer := Peer{make(chan string, 8), peerConn, deathFn}
 	PeerMap.Set(ip, newPeer)
 
@@ -220,6 +220,7 @@ func addPeer(ip string, peerConn *rpc.Client, deathFn func(string), id int) {
 
 // Starts heartbeat to a peer
 func startPeerHb(ip string) {
+	fmt.Printf("Starting hb goroutines for ip %s\n", ip)
 	go peerHbSender(ip)
 	go peerHbHandler(ip)
 }

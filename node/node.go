@@ -131,7 +131,7 @@ func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) e
 // Follower -> Leader rpc that is used to join this leader's cluster
 // Used during the election process when attempting to connect to this leader
 func (c PeerRpc) Follow(ip string, _ignored2 *string) error {
-	fmt.Println("follow call from:", ip)
+	fmt.Println("Peer.Follow from:", ip)
 	err := node.PeerAcceptThisNode(ip)
 	return err
 }
