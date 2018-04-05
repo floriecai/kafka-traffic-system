@@ -8,6 +8,7 @@ import (
 type NodeSettings struct {
 	MinReplicas uint8  `json:"min-replicas"`
 	HeartBeat   uint32 `json:"heartbeat"`
+	ClusterSize uint8  `json:"cluster-size"`
 }
 
 type Node struct {

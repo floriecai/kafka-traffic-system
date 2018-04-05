@@ -8,6 +8,7 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 
 	"../structs"
 	"./clusterlib"
@@ -20,6 +21,8 @@ type ClusterRpc struct {
 
 type PeerRpc struct {
 }
+
+const WRITE_TIMEOUT_SEC = 10 // Time to wait for RPC call to peer nodes to confirm write
 
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
@@ -46,31 +49,48 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 	writeId := c.WriteId
 	c.WriteLock.Unlock()
 
-	var numReplies uint
 	if node.NodeMode == node.Leader {
 		node.PeerMap.MapLock.RLock()
-		for ip, peer := range node.PeerMap.Map {
-			var writeConfirmed bool
 
-			resp := node.PropagateWriteReq{
-				Topic:      write.Topic,
-				VersionNum: writeId,
-				LeaderId:   PublicIp,
-				Data:       write.Data,
-			}
+		writesCh := make(chan bool, 30)
 
-			if err := peer.PeerConn.Call("Peer.ConfirmWrite", resp, &writeConfirmed); err != nil {
-				log.Println("Error in Write to Peer: [%d]", ip)
-				checkError(err, "WriteToCluster")
-			}
+		numRequiredWrites := node.MinReplicas
+		// Subtract 1 because Leader is counted in ClusterSize and only Followers confirm Writes
+		maxFailures := node.ClusterSize - numRequiredWrites - 1
+		writeVerdictCh := node.CountConfirmedWrites(writesCh, numRequiredWrites, maxFailures)
 
-			if writeConfirmed {
-				numReplies++
+		go func() {
+			for ip, peer := range node.PeerMap.Map {
+				var writeConfirmed bool
+
+				resp := node.PropagateWriteReq{
+					Topic:      write.Topic,
+					VersionNum: writeId,
+					LeaderId:   PublicIp,
+					Data:       write.Data,
+				}
+
+				writeCall := peer.PeerConn.Go("Peer.ConfirmWrite", resp, &writeConfirmed, nil)
+
+				go func(wc *rpc.Call) {
+					select {
+					case w := <-wc.Done:
+						if w.Error != nil {
+							fmt.Println("Peer [%s] REJECTED write", ip)
+							writesCh <- false
+						}
+					case <-time.After(WRITE_TIMEOUT_SEC):
+						writesCh <- false
+					}
+				}(writeCall)
 			}
-		}
+		}()
+
+		// Block on writeVerdictCh
+		writeSucceed := <-writeVerdictCh
 		node.PeerMap.MapLock.RUnlock()
 
-		if uint8(numReplies) < node.MinReplicas {
+		if writeSucceed {
 			if err := node.WriteNode(write.Topic, write.Data, writeId); err != nil {
 				return err
 			}
@@ -78,6 +98,8 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 			*resp = true
 			return nil
 		}
+
+		return node.InsufficientConfirmedWritesError("")
 	}
 	log.Println("WriteToCluster:: Node is not a leader. Should not have received Write")
 	return errors.New("Node is not a leader. Cannot send Write")

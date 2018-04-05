@@ -2,7 +2,7 @@
     "rpc-ip-port": ":12345",
     "node-settings": {
         "heartbeat": 10000,
-        "min-replicas": 3
-    },
-    "min-cluster-size": 5
+        "min-replicas": 3,
+        "cluster-size": 5
+    }
 }

@@ -46,7 +46,7 @@ func (e FileSystemError) Error() string {
 type InsufficientConfirmedWritesError string
 
 func (e InsufficientConfirmedWritesError) Error() string {
-	return fmt.Sprintf(string(e))
+	return fmt.Sprintf("Could not replicate write enough times. %s", string(e))
 }
 
 type IncompleteDataError string
@@ -117,6 +117,36 @@ func ReadNode(topic string) ([]string, error) {
 	}
 
 	return confirmedWrites, nil
+}
+
+// writeStatusCh - Channel to wait on for peers to write to whether they have confirmed the write
+// numRequiredWrites - Needed number of confirmed writes to reach majority
+// maxFailures - Number of unconfirmed writes until we should return (otherwise could wait indefinitely for numRequiredWrites)
+// Returns a channel with whether the Write was replicated
+func CountConfirmedWrites(writeStatusCh chan bool, numRequiredWrites, maxFailures uint8) chan bool {
+	writeReplicatedCh := make(chan bool, 1)
+	go func() {
+		numWrites, numFailures := uint8(0), uint8(0)
+		for {
+			if numRequiredWrites >= numWrites {
+				writeReplicatedCh <- true
+			}
+
+			if numFailures > maxFailures {
+				writeReplicatedCh <- false
+			}
+			select {
+			case writeSucceeded := <-writeStatusCh:
+				if writeSucceeded {
+					numWrites++
+				} else {
+					numFailures++
+				}
+			}
+		}
+	}()
+
+	return writeReplicatedCh
 }
 
 ///////////////Writing to disk helpers /////////////////

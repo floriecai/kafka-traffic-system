@@ -63,9 +63,8 @@ type TServer struct {
 }
 
 type Config struct {
-	NodeSettings   structs.NodeSettings `json:"node-settings"`
-	RpcIpPort      string               `json:"rpc-ip-port"`
-	MinClusterSize uint32               `json:"min-cluster-size"`
+	NodeSettings structs.NodeSettings `json:"node-settings"`
+	RpcIpPort    string               `json:"rpc-ip-port"`
 }
 
 const (
@@ -190,7 +189,7 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
-		if orphanNodes.Len >= config.MinClusterSize {
+		if orphanNodes.Len >= config.NodeSettings.ClusterSize {
 			orphanNodes.Lock()
 			lNode := orphanNodes.Orphans[0]
 			orphanNodes.Unlock()
@@ -208,7 +207,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 			orphanNodes.Lock()
 			defer orphanNodes.Unlock()
 			for i, orphan := range orphanNodes.Orphans {
-				if i >= int(config.MinClusterSize) {
+				if i >= int(config.NodeSettings.ClusterSize) {
 					break
 				}
 
@@ -221,7 +220,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				return err
 			}
 
-			orphanNodes.DropN(int(config.MinClusterSize))
+			orphanNodes.DropN(int(config.NodeSettings.ClusterSize))
 
 			topic := structs.Topic{
 				TopicName:   *topicName,

@@ -14,8 +14,12 @@ const HBTIMEOUT = 4
 const HBINTERVAL = 2
 
 var ServerClient *rpc.Client
-var MinReplicas uint8
-var HBInterval uint32
+
+var (
+	MinReplicas uint8
+	ClusterSize uint8
+	HBInterval  uint32
+)
 
 func ConnectToServer(ip string) {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
@@ -37,6 +41,7 @@ func ServerRegister(addr string) {
 		fmt.Printf("Error in heartbeat::Register()\n%s", err)
 	}
 	MinReplicas = resp.MinReplicas
+	ClusterSize = resp.ClusterSize
 	HBInterval = resp.HeartBeat
 }
 
