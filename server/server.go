@@ -225,7 +225,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 
 			topic := structs.Topic{
 				TopicName:   *topicName,
-				MinReplicas: config.NodeSettings.MinNumNodeConnections,
+				MinReplicas: config.NodeSettings.MinReplicas,
 				Leaders:     []string{leaderClusterRpc},
 				Followers:   orphanIps[1:]}
 

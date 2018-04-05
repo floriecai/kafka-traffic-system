@@ -70,8 +70,8 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 		}
 		node.PeerMap.MapLock.RUnlock()
 
-		if uint8(numReplies) < node.MinConnections {
-			if err := node.WriteFile(write.Topic, write.Data, writeId); err != nil {
+		if uint8(numReplies) < node.MinReplicas {
+			if err := node.WriteNode(write.Topic, write.Data, writeId); err != nil {
 				return err
 			}
 
@@ -84,7 +84,7 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 }
 
 func (c ClusterRpc) ReadFromCluster(topic string, response *[]string) error {
-	topicData, err := node.ReadFile(topic)
+	topicData, err := node.ReadNode(topic)
 	*response = topicData
 	return err
 }
@@ -144,14 +144,14 @@ func (c PeerRpc) Connect(_ignored1 string, _ignored2 *string) error {
 
 // Node -> Node RPC that is used to notify of liveliness
 func (c PeerRpc) Heartbeat(ip string, reply *string) error {
-	id += 1
+	id++
 	//fmt.Println("hb from:", ip, id)
 	return node.PeerHeartbeat(ip, reply, id)
 }
 
 // Leader -> Follower RPC to commit write
 func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
-	if err := node.WriteFile(req.Topic, req.Data, req.VersionNum); err != nil {
+	if err := node.WriteNode(req.Topic, req.Data, req.VersionNum); err != nil {
 		checkError(err, "ConfirmWrite")
 		return err
 	}
@@ -163,8 +163,13 @@ func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
 /*******************************
 | Main
 ********************************/
+
+// Args:
+// serverIP
+// dataPath - a valid, existing directory path that ends with /
 func main() {
 	serverIP := os.Args[1]
+	dataPath := os.Args[2]
 
 	PublicIp = node.GeneratePublicIP()
 	fmt.Println("The public IP is:", PublicIp)
@@ -175,7 +180,7 @@ func main() {
 	ln2, _ := net.Listen("tcp", PublicIp+"0")
 
 	// Open Filesystem on Disk
-	node.MountFiles()
+	node.MountFiles(dataPath)
 	// Open Peer to Peer RPC
 	ListenPeerRpc(ln2)
 	// Connect to the Server

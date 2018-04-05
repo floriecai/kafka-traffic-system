@@ -244,15 +244,13 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 			// if we have enough then we end the election process
 			case follower := <-receiveFollowerCh:
 				electionLock.Lock()
-				/////////////
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
 				fmt.Println("Added follower:", follower)
-				if len(PotentialFollowerIps) >= int(MinConnections)-2 {
+				if len(PotentialFollowerIps) >= int(MinReplicas)-2 {
 					updateCh <- true
 					electionLock.Unlock()
 					return
 				}
-				/////////////
 				electionLock.Unlock()
 
 			case <-timeoutCh:

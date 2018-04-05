@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/rpc"
 	"time"
@@ -13,7 +14,7 @@ const HBTIMEOUT = 4
 const HBINTERVAL = 2
 
 var ServerClient *rpc.Client
-var MinConnections uint8
+var MinReplicas uint8
 var HBInterval uint32
 
 func ConnectToServer(ip string) {
@@ -21,9 +22,9 @@ func ConnectToServer(ip string) {
 	ServerAddr, _ := net.ResolveTCPAddr("tcp", ip)
 	conn, err := net.DialTCP("tcp", LocalAddr, ServerAddr)
 	if err != nil {
-		fmt.Println("Could not connect to server")
+		log.Fatalf("Could not connect to server")
 	} else {
-		fmt.Println("Connecting to server on:", conn.LocalAddr().String())
+		log.Println("Connecting to server on:", conn.LocalAddr().String())
 		ServerClient = rpc.NewClient(conn)
 	}
 }
@@ -35,7 +36,7 @@ func ServerRegister(addr string) {
 	if err != nil {
 		fmt.Printf("Error in heartbeat::Register()\n%s", err)
 	}
-	MinConnections = resp.MinNumNodeConnections
+	MinReplicas = resp.MinReplicas
 	HBInterval = resp.HeartBeat
 }
 

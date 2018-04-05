@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 )
 
@@ -19,26 +22,19 @@ type ClusterData struct {
 	Dataset []FileData `json: "dataset"`
 }
 
-// // Use Sync map for concurrent read and write
-// // Use a write lock so we can't have data changed between a load and store
-// var fm *sync.Map
-// var writeLock *sync.Mutex
+// DataPath where files are written to disk
+var DataPath string
 
 var TopicName string
 
-// Write to VersionList
-// For a Leader node, this list is guaranteed to be in order
+// For a Leader node, this list is guaranteed to be in order and continuous
 // since a Leader serializes the Writes but we cannot guarantee
 // the time arrival of those Writes to Follower nodes
-
-// For a Follower node, we simply append the data, therefore needing a lock
-// to ensure we aren't overwriting the array
-
 var (
-	VersionListLock      sync.RWMutex
-	VersionList          []FileData
-	LatestConfirmedIndex uint
-) // Highest number that we know we have a write to
+	VersionListLock sync.Mutex
+	VersionList     []FileData
+	IsSorted        bool // TODO: To avoid doing multiple sorts
+)
 
 // FileSystem related errors //////
 type FileSystemError string
@@ -47,21 +43,50 @@ func (e FileSystemError) Error() string {
 	return fmt.Sprintf(string(e))
 }
 
-////////////////////////////////////
+type InsufficientConfirmedWritesError string
 
-func MountFiles() error {
-	// fm = new(sync.Map)
-	// writeLock = &sync.Mutex{}
-	// TODO: Make fault tolerant by reading files from drive
-
-	VersionListLock = sync.RWMutex{}
-	VersionList = make([]FileData, 0)
-	fname := ""
-	readFromDisk(fname)
-	return nil
+func (e InsufficientConfirmedWritesError) Error() string {
+	return fmt.Sprintf(string(e))
 }
 
-func WriteFile(topic, data string, version uint) error {
+type IncompleteDataError string
+
+func (e IncompleteDataError) Error() string {
+	return fmt.Sprintf("There is an incomplete dataset. Cannot read.")
+}
+
+////////////////////////////////////
+
+func MountFiles(path string) {
+	VersionListLock = sync.Mutex{}
+	VersionList = make([]FileData, 0)
+	fname := filepath.Join(path, "data.json")
+
+	// First time a node has registered with a server
+	if _, err := os.Stat(fname); os.IsNotExist(err) {
+		_, err := os.Create(fname)
+		if err != nil {
+			checkError(err, "MountFiles CreateFiles")
+			log.Fatalf("Couldn't create file [%s]", fname)
+		}
+
+		return
+	}
+
+	// Rejoining node, read topic data from disk
+	var clusterData ClusterData
+	err := readFromDisk(fname, &clusterData)
+	TopicName = clusterData.Topic
+	VersionList = clusterData.Dataset
+
+	if err != nil {
+		checkError(err, "MountFiles DiskRead")
+		log.Fatalf("Could not read from disk")
+	}
+}
+
+// Add the Write to the VersionList and commit Write to disk
+func WriteNode(topic, data string, version uint) error {
 	if TopicName != "" && topic != TopicName {
 		return errors.New("Writing to wrong topic")
 	}
@@ -72,49 +97,37 @@ func WriteFile(topic, data string, version uint) error {
 		Data:    data,
 	})
 
-	// writeLock.Lock()
-	// defer writeLock.Unlock()
-
-	// var newTopic = []string{data}
-
-	//TODO: Write to Drive as well when done
-	if err := writeToDisk(); err != nil {
+	if err := writeToDisk(DataPath); err != nil {
 		log.Println("ERROR WRITING TO DISK IN WRITEFILE")
 		return err
 	}
 	return nil
 }
 
-// Returns confirmed writes
-func ReadFile(topic string) ([]string, error) {
-	topicData := make([]string, 0)
-	if NodeMode == Leader && LatestConfirmedIndex == uint(len(VersionList)) {
-		for _, fdata := range VersionList {
-			topicData = append(topicData, fdata.Data)
-		}
+// Returns confirmed writes the node contains
+// Errors:
+// IncompleteDataError - Not all writes have been received
+func ReadNode(topic string) ([]string, error) {
+	VersionListLock.Lock()
+	defer VersionListLock.Unlock()
+	confirmedWrites := GetConfirmedWrites()
 
-		return topicData, nil
+	if len(confirmedWrites) != len(VersionList) {
+		return confirmedWrites, IncompleteDataError("")
 	}
 
-	if NodeMode == Follower {
-		// TODO, Do we read from file for follower nodes
-		return topicData, errors.New("It's a Follower, why you readnig from file")
-	}
-
-	return topicData, FileSystemError("General file error")
+	return confirmedWrites, nil
 }
 
 ///////////////Writing to disk helpers /////////////////
-
-func writeToDisk() error {
+func writeToDisk(path string) error {
 	fileData := ClusterData{
 		Topic:   TopicName,
 		Dataset: VersionList,
 	}
 
 	contents, err := json.MarshalIndent(fileData, "", "  ")
-	fname := ""
-	if err = ioutil.WriteFile(fname, contents, 0644); err != nil {
+	if err = ioutil.WriteFile(path, contents, 0644); err != nil {
 		log.Println("ERROR WRITING TO DISK")
 		return err
 	}
@@ -122,40 +135,58 @@ func writeToDisk() error {
 	return nil
 }
 
-func readFromDisk(fname string) (ClusterData, error) {
+func readFromDisk(fname string, clusterData *ClusterData) error {
 	contents, err := ioutil.ReadFile(fname)
-
-	var clusterData ClusterData
 	if err != nil {
-		return clusterData, err
+		checkError(err, "readFromDisk")
+		return err
 	}
 
-	err = json.Unmarshal(contents, &clusterData)
-	return clusterData, err
+	if len(contents) == 0 {
+		log.Println("Reading from disk ... No ClusterData")
+		return nil
+	}
+
+	err = json.Unmarshal(contents, clusterData)
+	return err
 }
 
 ////////////End Writing to disk helpers /////////////////
 
 /////////////// VersionList Helpers ///////////////////
 
-func HasCompleteList() bool {
-	for i, fdata := range VersionList[LatestConfirmedIndex:] {
-		offset := uint(i) + LatestConfirmedIndex
-		if offset != fdata.Version {
-			LatestConfirmedIndex = offset - 1
-			return false
+// Sorts VersionList by its version number and returns the first index
+// that does not match its version number
+// Returns -1 if all indices match its version number
+func sortVersionList() int {
+	sort.Slice(VersionList, func(i, j int) bool {
+		return VersionList[i].Version > VersionList[j].Version
+	})
+
+	for i, fdata := range VersionList {
+		if uint(i) != fdata.Version {
+			return i
 		}
 	}
-	return true
+
+	return -1
 }
 
-func GetConfirmedWrites() []FileData {
-	confirmedWrites := make([]FileData, 0)
-	for i := 0; uint(i) < LatestConfirmedIndex; i++ {
-		confirmedWrites = append(confirmedWrites, VersionList[i])
+// Returns the longest list of continuous ordered writes
+// VersionList: [1,2,3,4,6,7,8] will return [1,2,3,4]
+// Note: The caller of this function is responsible for locking
+//       since it likely has to do additional work related to the VersionList
+func GetConfirmedWrites() []string {
+	firstMismatch := sortVersionList()
+	if firstMismatch == -1 {
+		firstMismatch = len(VersionList)
 	}
 
-	return confirmedWrites
+	writes := make([]string, 0)
+	for _, fdata := range VersionList[:firstMismatch] {
+		writes = append(writes, fdata.Data)
+	}
+	return writes
 }
 
 /////////////// End VersionList Helpers ///////////////////

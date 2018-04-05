@@ -3,7 +3,6 @@ package node
 import (
 	"errors"
 	"fmt"
-	//"log"
 	"net"
 	"net/rpc"
 	"sync"
