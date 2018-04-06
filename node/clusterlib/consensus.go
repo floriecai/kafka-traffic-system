@@ -82,8 +82,6 @@ func StartConsensusProtocol() {
 			if becameLeader {
 				fmt.Println("ELECTION COMPLETE: became the new Leader, my IP is", lowestFollowerIp)
 				BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
-				// TODO: Notify server once you've become leader
-
 				fmt.Println(ERR_COL + "Notifying server of becoming leader" + ERR_END)
 
 				var ignore string
@@ -267,7 +265,7 @@ func StartElection() (updateCh chan bool, receiveFollowerCh chan string) {
 				electionLock.Lock()
 				PotentialFollowerIps = append(PotentialFollowerIps, follower)
 				fmt.Println("Added follower:", follower)
-				if len(PotentialFollowerIps) >= int(MinReplicas)-2 {
+				if len(PotentialFollowerIps) >= int(MinReplicas) {
 					updateCh <- true
 					electionLock.Unlock()
 					return
