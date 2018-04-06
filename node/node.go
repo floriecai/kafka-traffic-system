@@ -30,15 +30,34 @@ var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
 var id int = 0
 
-var WriteLock *sync.Mutex
-var WriteId uint
+var (
+	WriteLock *sync.Mutex
+	WriteId   int
+	WriteIdCh chan int
+)
 
 /*******************************
 | Initializing global vars
 ********************************/
 func InitializeDataStructs() {
 	WriteLock = &sync.Mutex{}
-	WriteId = 0
+	WriteId = 1
+	WriteIdCh = make(chan int)
+
+	// Because of the namespacing, package node updates the WriteId
+	// and we need node's main package to get that write
+	go func() {
+		for {
+			select {
+			case wId := <-WriteIdCh:
+				// Set new WriteId
+				fmt.Println(ERR_COL + "New WriteId set" + ERR_END)
+				WriteLock.Lock()
+				WriteId = wId
+				WriteLock.Unlock()
+			}
+		}
+	}()
 }
 
 /*******************************
@@ -139,14 +158,18 @@ func ListenPeerRpc(ln net.Listener) {
 // Server -> Node rpc that sets that node as a leader
 // When it returns the node will have been established as leader
 func (c PeerRpc) Lead(ips []string, clusterAddr *string) error {
-	err := node.BecomeLeader(ips, PeerRpcAddr)
+	_, err := node.BecomeLeader(ips, PeerRpcAddr)
 	*clusterAddr = ClusterRpcAddr
 	return err
 }
 
 // Leader -> Node rpc that sets the caller as this node's leader
-func (c PeerRpc) FollowMe(msg node.FollowMeMsg, _ignored *string) error {
+func (c PeerRpc) FollowMe(msg node.FollowMeMsg, latestData *int) error {
 	err := node.FollowLeader(msg, PeerRpcAddr)
+	if err == nil {
+		version := node.GetLatestVersion()
+		*latestData = version
+	}
 	return err
 }
 
@@ -188,6 +211,33 @@ func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
 	return nil
 }
 
+func (c PeerRpc) GetWrites(requestedWrites map[int]bool, writeData *[]node.FileData) error {
+	writes := make([]node.FileData, 0)
+	for id := range requestedWrites {
+		// If it's an id less than the FirstMismatch, we know that the id matches
+		// the index in VersionList
+		if id < node.FirstMismatch {
+			writes = append(writes, node.VersionList[id])
+		}
+
+		// The data needed is out of order in VersionList, so do linear search
+		node.VersionListLock.Lock()
+		found := false
+		for _, fdata := range node.VersionList[node.FirstMismatch:] {
+			if fdata.Version == id {
+				writes = append(writes, fdata)
+				found = true
+			}
+		}
+
+		if !found {
+			log.Println(ERR_COL+"Received GetWrites for new Leader but does not have requested write[%d]"+ERR_END, id)
+		}
+		node.VersionListLock.Unlock()
+	}
+	return nil
+}
+
 /*******************************
 | Main
 ********************************/
@@ -209,7 +259,7 @@ func main() {
 
 	InitializeDataStructs()
 	// Open Filesystem on Disk
-	node.MountFiles(dataPath)
+	node.MountFiles(dataPath, WriteIdCh)
 	// Open Peer to Peer RPC
 	ListenPeerRpc(ln2)
 	// Connect to the Server

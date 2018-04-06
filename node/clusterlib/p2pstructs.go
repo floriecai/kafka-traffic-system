@@ -16,6 +16,6 @@ type ModFollowerListMsg struct {
 type PropagateWriteReq struct {
 	Topic      string
 	Data       string
-	VersionNum uint
+	VersionNum int
 	LeaderId   string
 }

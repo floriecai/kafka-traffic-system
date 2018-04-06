@@ -8,6 +8,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"net/rpc"
@@ -46,12 +47,14 @@ var ClusterRpcAddr string
 
 // Initial entry point to the consensus protocol
 // Called when the leader heartbeat stops
-func StartConsensusProtocol() {
+// Returns error if too many nodes failed and we cannot rebuild the dataset
+func StartConsensusProtocol() error {
 	fmt.Println("ELECTION STARTED: my follower id is", FollowerId)
 
 	// create Consensus job that returns an update channel and a channel for the func to receive followers on
 	var updateChannel chan bool
 
+	failErr := ""
 	for len(DirectFollowersList) > 0 {
 		lowestFollowerIp, lowestFollowerId := ScanFollowerList()
 		// case 1: we are the lowest follower and likely to become leader
@@ -75,7 +78,27 @@ func StartConsensusProtocol() {
 
 			if becameLeader {
 				fmt.Println("ELECTION COMPLETE: became the new Leader, my IP is", lowestFollowerIp)
-				BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
+				latestVersions, _ := BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
+
+				// Get entire dataset from Followers
+				// 1) Scan for highest VersionNumber
+				var max int
+				for _, v := range latestVersions {
+					if max < v {
+						max = v
+					}
+				}
+
+				// Set the next WriteId to be after the highestLatestVersion and send back to node main
+				writeIdCh <- max + 1
+
+				// Aggregate any missing data
+				if err := GetMissingData(max + 1); err != nil {
+					failErr = ERR_COL + "ELECTION PROTOCOL COULD NOT BE COMPLETE BECAUSE COULD NOT REBUILD DATA" + ERR_END
+					break
+				}
+
+				// Notify Server of new leader
 				fmt.Println(ERR_COL + "Notifying server of becoming leader" + ERR_END)
 
 				var ignore string
@@ -101,7 +124,6 @@ func StartConsensusProtocol() {
 			fmt.Printf("Try to follow this leader: %s\n\n", lowestFollowerIp)
 			err := PeerFollowThatNode(lowestFollowerIp)
 			if err == nil {
-				// FIXME: election not actually complete?
 				fmt.Printf("ELECTION COMPLETE: following %s\n\n", lowestFollowerIp)
 				break
 			} else {
@@ -110,6 +132,12 @@ func StartConsensusProtocol() {
 		}
 	}
 
+	if failErr != "" {
+		log.Print(failErr)
+		return IncompleteDataError(failErr)
+	}
+
+	return nil
 }
 
 // Function Nominate is called when the peer decides there is a leader
@@ -175,7 +203,6 @@ func PeerAcceptThisNode(ip string) error {
 
 		client := rpc.NewClient(conn)
 
-		var _ignored string
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
 
 		FollowerListLock.RLock()
@@ -184,7 +211,8 @@ func PeerAcceptThisNode(ip string) error {
 		FollowerId += 1
 		msg := FollowMeMsg{MyAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n\n", ip)
-		err = client.Call("Peer.FollowMe", msg, &_ignored)
+		var latestData uint
+		err = client.Call("Peer.FollowMe", msg, &latestData)
 		////////////////////////////
 		FollowerListLock.RUnlock()
 		if err != nil {

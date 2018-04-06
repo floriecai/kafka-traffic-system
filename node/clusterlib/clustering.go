@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 )
 
 type Mode int
@@ -55,6 +56,7 @@ var NodeMode Mode = Follower
 var PeerMap PeerCMap = PeerCMap{Map: make(map[string]Peer)}
 
 var DirectFollowersList map[string]int // ip -> followerID
+
 // Global incrementer for follower ID
 // For followers this will be a static value of the assigned follower ID
 var FollowerId int = 0
@@ -62,15 +64,19 @@ var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
 
+const CONSENSUS_FAILED_WAIT = 10 // Number of seconds to wait until retrying consensus protocol
+
 // Args:
 // ips - the list of potential followers should this current node get elected
 // LeaderAddr - address which other followers should connect to for peer-to-peer communication
-func BecomeLeader(ips []string, LeaderAddr string) (err error) {
+// Returns a list of the highest version numbers each follower has
+func BecomeLeader(ips []string, LeaderAddr string) (latestVersions []int, err error) {
 	// reference addr for consensus.go
 	MyAddr = LeaderAddr
 	DirectFollowersList = make(map[string]int)
 	NodeMode = Leader
 
+	latestVersions = make([]int, 0)
 	for _, ip := range ips {
 		if ip == LeaderAddr {
 			continue
@@ -93,8 +99,6 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 
 		client := rpc.NewClient(conn)
 
-		var _ignored string
-
 		addPeer(ip, client, NodeDeathHandler, FollowerId)
 
 		// Write lock when modifying the direct followers list
@@ -105,11 +109,14 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
 		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
-		err = client.Call("Peer.FollowMe", msg, &_ignored)
+
+		var latestVersion int
+		err = client.Call("Peer.FollowMe", msg, &latestVersion)
 		if err != nil {
 			continue
 		}
 
+		latestVersions = append(latestVersions, latestVersion)
 		FollowerId++
 		////////////////////////////
 		FollowerListLock.Unlock()
@@ -117,7 +124,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		startPeerHb(ip)
 		// unlock
 	}
-	return err
+	return latestVersions, err
 }
 
 func FollowLeader(msg FollowMeMsg, addr string) (err error) {
@@ -268,8 +275,18 @@ func NodeDeathHandler(ip string) {
 	case Follower:
 		if ip == LEADER_ID {
 			fmt.Println("The leader has died, initiating consensus protocol")
-			// consensus.go
-			StartConsensusProtocol()
+
+			// Try the consensusProtocol indefinitely until there's a leader
+			// If the consensus protocol failed, that means there were too many node failures
+			// We sleep and try again hoping that nodes have rejoined
+			for {
+				err := StartConsensusProtocol()
+				if err == nil {
+					break
+				}
+
+				time.Sleep(CONSENSUS_FAILED_WAIT)
+			}
 		}
 		// N/A since Followers do not connect to other Followers
 
