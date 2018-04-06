@@ -1,6 +1,7 @@
 package concurrentlib
 
 import (
+	"log"
 	"net"
 	"net/rpc"
 	"sync"
@@ -71,6 +72,9 @@ func (o *Orphanage) Append(orphan structs.Node) {
 // Lock is manually set from caller
 func (o *Orphanage) DropN(n int) []structs.Node {
 	droppedNodes := o.Orphans[:n]
+	if n > len(o.Orphans) {
+		log.Println("\x1b[31;1m"+"INDEX OUT OF RANGE ERROR!!!! LEN %d, WANTS TO DROP : %d"+"\x1b[0m", len(o.Orphans), n)
+	}
 	o.Orphans = o.Orphans[n:]
 	return droppedNodes
 }

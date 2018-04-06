@@ -1,7 +1,6 @@
 package structs
 
 import (
-	//"net"
 	"net/rpc"
 )
 
@@ -22,16 +21,8 @@ type Topic struct {
 	TopicName   string
 	MinReplicas uint8
 	Leaders     []string // list of ip addresses of each node
-	Followers   []string // list of ip addresses of each node
 }
 
 ////////////////////// RPC STRUCTS //////////////////////
-
-type AdditionalNodeRequest struct { // nothing for now
-}
-
-type ExtraNodeResponse struct {
-	NewNodeIpAddr string
-}
 
 /////////////////// RPC STRUCTS END ////////////////////

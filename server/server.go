@@ -63,9 +63,7 @@ func (e InsufficientNodesForCluster) Error() string {
 // DATA STRUCTURES
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-type TServer struct {
-	TopicsFileLock sync.Mutex
-}
+type TServer struct{}
 
 type Config struct {
 	NodeSettings structs.NodeSettings `json:"node-settings"`
@@ -82,8 +80,7 @@ type AllNodes struct {
 }
 
 var (
-	tServer *TServer
-	config  Config
+	config Config
 
 	allNodes    = AllNodes{all: make(map[string]*structs.Node)}
 	orphanNodes = c.Orphanage{Orphans: make([]structs.Node, 0)}
@@ -208,6 +205,8 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				// remove stale nodes from orphanNodes
 				if !exists {
 					log.Println("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
+					log.Println("All nodes: %+v", allNodes.all)
+					log.Println("Orphan Nodes: %+v", orphanNodes.Orphans)
 					orphanNodes.DropN(1)
 					continue
 				}
@@ -235,8 +234,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				topic := structs.Topic{
 					TopicName:   *topicName,
 					MinReplicas: config.NodeSettings.MinReplicas,
-					Leaders:     []string{leaderClusterRpc},
-					Followers:   orphanIps[1:]}
+					Leaders:     []string{leaderClusterRpc}}
 
 				topics.Set(*topicName, topic)
 				*topicReply = topic
@@ -263,45 +261,10 @@ func (s *TServer) GetTopic(topicName *string, topicReply *structs.Topic) error {
 // Helpers for Leader promotion/demotion
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (s *TServer) AddTopicLeader(topicName *string, newLeader *structs.Node) (err error) {
-	// topicI, ok := s.TopicMap.Load(topicName)
-	// topicI.(structs.)
-	// if ok {
-	// 	topic.Leaders = append(topic.Leaders, newLeader)
-	// 	return nil
-	// } else {
-	// 	return TopicDoesNotExistError(topicName)
-	// }
-	return nil
-}
-
-// Does not preserve order
-func (s *TServer) RemoveTopicLeader(topicName *string, oldLeader *structs.Node) (err error) {
-	// topic, ok := s.TopicMap.Load(topicName)
-	// if ok {
-	// 	// Find index of oldLeader in topic.Leaders
-	// 	idx := -1
-	// 	for i, v := range topic.Leaders {
-	// 		if oldLeader == v {
-	// 			idx = i
-	// 		}
-	// 	}
-
-	// 	// Swap oldLeader with last Leader and
-	// 	// Remove last element from slice
-	// 	if idx < 0 {
-	// 		return LeaderDoesNotExistError()
-	// 	} else {
-	// 		topic.Leaders[len(topic.Leaders)-1], topic.Leaders[idx] =
-	// 			topic.Leaders[idx], topic.Leaders[len(topic.Leaders)-1]
-
-	// 		topic.Leaders = topic.Leaders[:len(topic.Leaders)-1]
-
-	// 		return nil
-	// 	}
-	// } else {
-	// 	return TopicDoesNotExistError(topicName)
-	// }
+func (s *TServer) UpdateTopicLeader(topic *structs.Topic, ignore *string) (err error) {
+	fmt.Println(ERR_COL + "TOPIC LEADER IS BEING UPDATED" + ERR_END)
+	topics.Set(topic.TopicName, *topic)
+	// TODO commit changes to topic to disk
 	return nil
 }
 
@@ -309,7 +272,6 @@ func main() {
 	//gob.Register(&net.TCPAddr{})
 
 	// Pass in IP as command line argument
-	// ip := os.Args[1] + ":0"
 	path := flag.String("c", "", "Path to the JSON config")
 	flag.Parse()
 
@@ -323,7 +285,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	// Set up Server RPC
-	tServer = new(TServer)
+	tServer := new(TServer)
 	server := rpc.NewServer()
 	server.Register(tServer)
 

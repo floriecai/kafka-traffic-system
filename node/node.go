@@ -24,6 +24,8 @@ const ERR_END = "\x1b[0m"    // Neutral
 
 const WRITE_TIMEOUT_SEC = 10 // Time to wait for RPC call to peer nodes to confirm write
 
+// ClusterRpcAddr is the ip:port that the producer/consumer API's interface with
+// PeerRpcAddr is the ip:port connecting Leader -> Follower nodes
 var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
 var id int = 0
@@ -47,6 +49,7 @@ func ListenClusterRpc(ln net.Listener) {
 	server := rpc.NewServer()
 	server.RegisterName("Cluster", cRpc)
 	ClusterRpcAddr = ln.Addr().String()
+	node.ClusterRpcAddr = ClusterRpcAddr
 	fmt.Println("ClusterRpc is listening on: ", ERR_COL+ClusterRpcAddr+ERR_END)
 
 	server.Accept(ln)

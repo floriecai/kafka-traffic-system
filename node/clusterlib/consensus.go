@@ -19,6 +19,8 @@ import (
 	"net/rpc"
 	"sync"
 	"time"
+
+	"../../structs"
 )
 
 // Maximum number of seconds for consensus job to wait for before timeout error.
@@ -45,10 +47,11 @@ var nominationCompleteCh chan bool = make(chan bool, 1)
 
 var PotentialFollowerIps []string
 var receiveFollowerChannel chan string
-var MyAddr string
+var MyAddr string // Address for PeerRPC
+var ClusterRpcAddr string
 
 // Initial entry point to the consensus protocol
-// Called when the leader heartbeat dstops
+// Called when the leader heartbeat stops
 func StartConsensusProtocol() {
 	fmt.Println("ELECTION STARTED: my follower id is", FollowerId)
 
@@ -80,6 +83,24 @@ func StartConsensusProtocol() {
 				fmt.Println("ELECTION COMPLETE: became the new Leader, my IP is", lowestFollowerIp)
 				BecomeLeader(PotentialFollowerIps, lowestFollowerIp)
 				// TODO: Notify server once you've become leader
+
+				fmt.Println(ERR_COL + "Notifying server of becoming leader" + ERR_END)
+
+				var ignore string
+				topic := structs.Topic{
+					TopicName:   TopicName,
+					MinReplicas: MinReplicas,
+					Leaders:     []string{ClusterRpcAddr},
+				}
+				// If the server is down, we need to continuously attempt to notify it until
+				// the server is aware of the new leader
+				for {
+					if err := ServerClient.Call("TServer.UpdateTopicLeader", &topic, &ignore); err != nil {
+						checkError(err, "StartConsensusProtocol UpdateTopicLeader")
+					}
+					break
+				}
+
 				break
 			}
 		} else {

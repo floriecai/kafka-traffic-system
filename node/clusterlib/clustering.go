@@ -62,6 +62,9 @@ var FollowerListLock sync.RWMutex
 
 var LeaderConn *rpc.Client
 
+// Args:
+// ips - the list of potential followers should this current node get elected
+// LeaderAddr - address which other followers should connect to for peer-to-peer communication
 func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	// reference addr for consensus.go
 	MyAddr = LeaderAddr
@@ -264,14 +267,11 @@ func NodeDeathHandler(ip string) {
 	switch NodeMode {
 	case Follower:
 		if ip == LEADER_ID {
-			//TODO initiate consensus protocol
 			fmt.Println("The leader has died, initiating consensus protocol")
 			// consensus.go
 			StartConsensusProtocol()
-		} else {
-			//TODO react to death of other peers
-			fmt.Println("Other peer has died, need to notify leader >>TODO<<")
 		}
+		// N/A since Followers do not connect to other Followers
 
 	case Leader:
 		fmt.Println("A node has died, need to remove it from everyone's follower list")
