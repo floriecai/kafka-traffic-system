@@ -45,7 +45,7 @@ func (pm *PeerCMap) Delete(k string) {
 func (pm *PeerCMap) GetCount() int {
 	pm.MapLock.Lock()
 	defer pm.MapLock.Unlock()
-	return len(*pm)
+	return len(pm.Map)
 }
 
 ///////////// Map functions for concurrent Peer Map //////////////////
@@ -114,6 +114,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n", ip)
 		err = client.Call("Peer.FollowMe", msg, &_ignored)
+		startPeerHb(ip)
 		if err != nil {
 			continue
 		}
@@ -122,12 +123,17 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		////////////////////////////
 		FollowerListLock.Unlock()
 
-		startPeerHb(ip)
 		successCount++
 	}
 
-	go WatchFollowerCount(/*FIXME, need server setting*/5, LeaderAddr)
-	return nil
+	// Num followers required is ClusterSize - 1, since leader is counted
+	go WatchFollowerCount(int(ClusterSize)-1, LeaderAddr)
+	if successCount > 0 {
+		return nil
+	} else {
+		fmt.Println("BecomeLeader: Could not connect to any followers!")
+		return fmt.Errorf("Could not connect to any followers")
+	}
 }
 
 func FollowLeader(msg FollowMeMsg, addr string) (err error) {
@@ -167,6 +173,7 @@ func FollowLeader(msg FollowMeMsg, addr string) (err error) {
 	LEADER_ID = msg.LeaderIp
 	addPeer(LEADER_ID, LeaderConn, NodeDeathHandler, 0)
 	startPeerHb(LEADER_ID)
+	fmt.Println("FollowLeader: follower list is", msg.FollowerIps)
 
 	return err
 }
@@ -176,15 +183,18 @@ func ModifyFollowerList(follower ModFollowerListMsg, add bool) (err error) {
 	defer FollowerListLock.Unlock()
 
 	if add {
-		if DirectFollowersList[follower.FollowerIp] > 0 {
+		_, exists := DirectFollowersList[follower.FollowerIp]
+		if exists {
 			err = errors.New("Clustering: Follower is already known")
 		} else {
 			fmt.Printf("Adding %s to follower list\n", follower.FollowerIp)
 			DirectFollowersList[follower.FollowerIp] = follower.FollowerId
 		}
 	} else {
-		if !(DirectFollowersList[follower.FollowerIp] > 0) {
-			err = errors.New("Clustering: Follower is not known. Cannot remove follower")
+		_, exists := DirectFollowersList[follower.FollowerIp]
+		if !exists {
+			err = fmt.Errorf("Clustering: %s not known. Cannot remove follower",
+				follower.FollowerIp)
 			fmt.Println(err.Error())
 		} else {
 			fmt.Printf("Removing %s from follower list\n", follower.FollowerIp)
@@ -301,16 +311,19 @@ func NodeDeathHandler(ip string) {
 // will never stop being leader of a topic under normal operation, so this
 // function has no exit conditions. Intended to be called as a goroutine.
 func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
+	fmt.Println("Watching follower count now")
 	for {
-		time.Sleep(3 * time.Second())
+		time.Sleep(3 * time.Second)
 		count := PeerMap.GetCount()
-		numToGet := count - requiredNumFollowers
+		numToGet := requiredNumFollowers - count
 		if numToGet <= 0 {
 			continue
 		}
 
+		fmt.Printf("WatchFollowerCount: Need %d more followers!\n", numToGet)
+
 		var nodeAddr string
-		for i := range(numToGet) {
+		for i := 0; i < numToGet; i++ {
 			err := ServerClient.Call("TServer.TakeNode", "", &nodeAddr)
 			if err != nil {
 				// Sleep and try again later, no point requesting any more
@@ -327,12 +340,13 @@ func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
 
 			FollowerListLock.Lock()
 			DirectFollowersList[nodeAddr] = FollowerId
-			////////////////////////////
 
-			// It's ok if it fails, gaps in follower ID sequence will not mean anything
+			var ignored string
+
 			msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
-			fmt.Printf("Count Watcher: telling node with ip %s to follow me\n", ip)
-			err = client.Call("Peer.FollowMe", msg, &_ignored)
+			fmt.Printf("Count Watcher: telling node with ip %s to follow me\n", nodeAddr)
+			err = client.Call("Peer.FollowMe", msg, &ignored)
+			startPeerHb(nodeAddr)
 			if err != nil {
 				continue
 			}
@@ -340,8 +354,6 @@ func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
 			FollowerId++
 			////////////////////////////
 			FollowerListLock.Unlock()
-
-			startPeerHb(ip)
 		}
 	}
 }

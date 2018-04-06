@@ -184,6 +184,22 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 	return nil
 }
 
+func (s *TServer) TakeNode(ignored string, nodeAddr *string) error {
+	orphanNodes.Lock()
+	defer orphanNodes.Unlock()
+
+	if orphanNodes.Len <= 0 {
+		outLog.Println("TakeNode: No nodes available")
+		return fmt.Errorf("No nodes available for taking")
+	}
+
+	node := orphanNodes.DropN(1)
+	*nodeAddr = node[0].Address
+	outLog.Printf("TakeNode: gave %s\n", *nodeAddr)
+
+	return nil
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Producer API RPC
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,11 +207,12 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
+		orphanNodes.Lock()
+		defer orphanNodes.Unlock()
+
 		for {
 			if orphanNodes.Len >= uint32(config.NodeSettings.ClusterSize) {
-				orphanNodes.Lock()
 				lNode := orphanNodes.Orphans[0]
-				orphanNodes.Unlock()
 
 				allNodes.Lock()
 				node, exists := allNodes.all[lNode.Address]
@@ -213,8 +230,6 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 
 				orphanIps := make([]string, 0)
 
-				orphanNodes.Lock()
-				defer orphanNodes.Unlock()
 				for i, orphan := range orphanNodes.Orphans {
 					if i >= int(config.NodeSettings.ClusterSize) {
 						break
