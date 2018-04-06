@@ -14,13 +14,13 @@ import (
 	"./clusterlib"
 )
 
-type ClusterRpc struct {
-	WriteLock *sync.Mutex
-	WriteId   uint
-}
+type ClusterRpc struct{}
 
-type PeerRpc struct {
-}
+type PeerRpc struct{}
+
+// ANSII Colour Codes for debugging
+const ERR_COL = "\x1b[31;1m" // RED
+const ERR_END = "\x1b[0m"    // Neutral
 
 const WRITE_TIMEOUT_SEC = 10 // Time to wait for RPC call to peer nodes to confirm write
 
@@ -28,26 +28,34 @@ var ClusterRpcAddr, PeerRpcAddr, PublicIp string
 
 var id int = 0
 
+var WriteLock *sync.Mutex
+var WriteId uint
+
+/*******************************
+| Initializing global vars
+********************************/
+func InitializeDataStructs() {
+	WriteLock = &sync.Mutex{}
+	WriteId = 0
+}
+
 /*******************************
 | Cluster RPC Calls
 ********************************/
 func ListenClusterRpc(ln net.Listener) {
-	cRpc := ClusterRpc{
-		WriteLock: &sync.Mutex{},
-	}
+	cRpc := ClusterRpc{}
 	server := rpc.NewServer()
 	server.RegisterName("Cluster", cRpc)
 	ClusterRpcAddr = ln.Addr().String()
-	fmt.Println("ClusterRpc is listening on: ", ClusterRpcAddr)
+	fmt.Println("ClusterRpc is listening on: ", ERR_COL+ClusterRpcAddr+ERR_END)
 
 	server.Accept(ln)
 }
 
-func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
+func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, _ignored *string) error {
 
-	c.WriteLock.Lock()
-	writeId := c.WriteId
-	c.WriteLock.Unlock()
+	WriteLock.Lock()
+	defer WriteLock.Unlock()
 
 	if node.NodeMode == node.Leader {
 		node.PeerMap.MapLock.RLock()
@@ -65,7 +73,7 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 
 				resp := node.PropagateWriteReq{
 					Topic:      write.Topic,
-					VersionNum: writeId,
+					VersionNum: WriteId,
 					LeaderId:   PublicIp,
 					Data:       write.Data,
 				}
@@ -76,7 +84,8 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 					select {
 					case w := <-wc.Done:
 						if w.Error != nil {
-							fmt.Println("Peer [%s] REJECTED write", ip)
+							checkError(w.Error, "ConfirmWriteRPC")
+							fmt.Println("Peer [%s] REJECTED write", ERR_COL+ip+ERR_END)
 							writesCh <- false
 						}
 					case <-time.After(WRITE_TIMEOUT_SEC):
@@ -91,11 +100,11 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, resp *bool) error {
 		node.PeerMap.MapLock.RUnlock()
 
 		if writeSucceed {
-			if err := node.WriteNode(write.Topic, write.Data, writeId); err != nil {
+			if err := node.WriteNode(write.Topic, write.Data, WriteId); err != nil {
+				fmt.Println(ERR_COL + "WRITING ERROR ON LEADER" + ERR_END)
 				return err
 			}
-
-			*resp = true
+			WriteId++
 			return nil
 		}
 
@@ -194,13 +203,14 @@ func main() {
 	dataPath := os.Args[2]
 
 	PublicIp = node.GeneratePublicIP()
-	fmt.Println("The public IP is:", PublicIp)
+	fmt.Println("The public IP is: [%s], DataPath is: %s", ERR_COL+PublicIp+ERR_END, ERR_COL+dataPath+ERR_END)
 	// Listener for clients -> cluster
 	ln1, _ := net.Listen("tcp", PublicIp+"0")
 
 	// Listener for server and other nodes
 	ln2, _ := net.Listen("tcp", PublicIp+"0")
 
+	InitializeDataStructs()
 	// Open Filesystem on Disk
 	node.MountFiles(dataPath)
 	// Open Peer to Peer RPC

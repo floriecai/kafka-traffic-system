@@ -92,7 +92,7 @@ func peerHbSender(id string) {
 		arg := MyAddr
 		var reply string
 
-		fmt.Printf("Sending Peer.Heartbeat, arg is %s\n", arg)
+		// fmt.Printf("Sending Peer.Heartbeat, arg is %s\n", arg)
 		call := peer.PeerConn.Go("Peer.Heartbeat", arg, &reply, nil)
 		if call == nil {
 			// connection is dead - error
@@ -157,7 +157,7 @@ func peerHbHandler(id string) {
 				// Peer failure by another function, exit
 				return
 			case "hb":
-				fmt.Printf("HbHandler: received hb from <%s>\n", id)
+				// fmt.Printf("HbHandler: received hb from <%s>\n", id)
 				continue
 			}
 		}

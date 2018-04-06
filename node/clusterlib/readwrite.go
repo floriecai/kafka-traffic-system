@@ -12,6 +12,10 @@ import (
 	"sync"
 )
 
+const GREEN_COL = "\x1b[32;1m"
+const ERR_COL = "\x1b[31;1m"
+const ERR_END = "\x1b[0m"
+
 type FileData struct {
 	Version uint   `json:"version"`
 	Data    string `json:"data"`
@@ -60,6 +64,7 @@ func (e IncompleteDataError) Error() string {
 func MountFiles(path string) {
 	VersionListLock = sync.Mutex{}
 	VersionList = make([]FileData, 0)
+	DataPath = path
 	fname := filepath.Join(path, "data.json")
 
 	// First time a node has registered with a server
@@ -124,7 +129,7 @@ func ReadNode(topic string) ([]string, error) {
 // maxFailures - Number of unconfirmed writes until we should return (otherwise could wait indefinitely for numRequiredWrites)
 // Returns a channel with whether the Write was replicated
 func CountConfirmedWrites(writeStatusCh chan bool, numRequiredWrites, maxFailures uint8) chan bool {
-	writeReplicatedCh := make(chan bool, 1)
+	writeReplicatedCh := make(chan bool)
 	go func() {
 		numWrites, numFailures := uint8(0), uint8(0)
 		for {
@@ -156,9 +161,10 @@ func writeToDisk(path string) error {
 		Dataset: VersionList,
 	}
 
+	fname := filepath.Join(path, "data.json")
 	contents, err := json.MarshalIndent(fileData, "", "  ")
-	if err = ioutil.WriteFile(path, contents, 0644); err != nil {
-		log.Println("ERROR WRITING TO DISK")
+	if err = ioutil.WriteFile(fname, contents, 0644); err != nil {
+		log.Println(ERR_COL + "ERROR WRITING TO DISK" + ERR_END)
 		return err
 	}
 

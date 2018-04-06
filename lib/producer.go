@@ -100,13 +100,13 @@ func (s *WriteSession) Write(datum string) error {
 	}
 
 	var req structs.WriteMsg
-	var resp string
+	var ignore string
 
 	req.Topic = s.topicName
 	req.Id = s.clientId
 	req.Data = datum
 
-	return s.leaderConn.Call("Cluster.WriteToCluster", req, &resp)
+	return s.leaderConn.Call("Cluster.WriteToCluster", req, &ignore)
 }
 
 // Attempt to connect to a topic leader for writing

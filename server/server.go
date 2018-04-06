@@ -21,6 +21,11 @@ import (
 // ERRORS
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Just for debugging
+const GREEN_COL = "\x1b[32;1m"
+const ERR_COL = "\x1b[31;1m"
+const ERR_END = "\x1b[0m"
+
 type AddressAlreadyRegisteredError string
 
 func (e AddressAlreadyRegisteredError) Error() string {
@@ -136,7 +141,7 @@ func (s *TServer) Register(n string, nodeSettings *structs.NodeSettings) error {
 
 	*nodeSettings = config.NodeSettings
 
-	outLog.Printf("Got Register from %s\n", n)
+	outLog.Printf("Got Register from %s\n", GREEN_COL+n+ERR_END)
 
 	return nil
 }
@@ -159,7 +164,7 @@ func monitor(k string, heartBeatInterval time.Duration) {
 	for {
 		allNodes.Lock()
 		if time.Now().UnixNano()-allNodes.all[k].RecentHeartbeat > int64(heartBeatInterval) {
-			outLog.Printf("%s timed out\n", allNodes.all[k].Address)
+			outLog.Printf("%s timed out\n", ERR_COL+allNodes.all[k].Address+ERR_END)
 			delete(allNodes.all, k)
 			allNodes.Unlock()
 			return
@@ -189,48 +194,54 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
-		if orphanNodes.Len >= uint32(config.NodeSettings.ClusterSize) {
-			orphanNodes.Lock()
-			lNode := orphanNodes.Orphans[0]
-			orphanNodes.Unlock()
+		for {
+			if orphanNodes.Len >= uint32(config.NodeSettings.ClusterSize) {
+				orphanNodes.Lock()
+				lNode := orphanNodes.Orphans[0]
+				orphanNodes.Unlock()
 
-			allNodes.Lock()
-			node, exists := allNodes.all[lNode.Address]
-			allNodes.Unlock()
+				allNodes.Lock()
+				node, exists := allNodes.all[lNode.Address]
+				allNodes.Unlock()
 
-			if !exists {
-				log.Fatalf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
-			}
-
-			orphanIps := make([]string, 0)
-
-			orphanNodes.Lock()
-			defer orphanNodes.Unlock()
-			for i, orphan := range orphanNodes.Orphans {
-				if i >= int(config.NodeSettings.ClusterSize) {
-					break
+				// Node may have disconnected and was removed from allNodes map. We do not
+				// remove stale nodes from orphanNodes
+				if !exists {
+					log.Println("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
+					orphanNodes.DropN(1)
+					continue
 				}
 
-				orphanIps = append(orphanIps, orphan.Address)
+				orphanIps := make([]string, 0)
+
+				orphanNodes.Lock()
+				defer orphanNodes.Unlock()
+				for i, orphan := range orphanNodes.Orphans {
+					if i >= int(config.NodeSettings.ClusterSize) {
+						break
+					}
+
+					orphanIps = append(orphanIps, orphan.Address)
+				}
+
+				var leaderClusterRpc string
+				if err := node.Client.Call("Peer.Lead", orphanIps, &leaderClusterRpc); err != nil {
+					errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
+					return err
+				}
+
+				orphanNodes.DropN(int(config.NodeSettings.ClusterSize))
+
+				topic := structs.Topic{
+					TopicName:   *topicName,
+					MinReplicas: config.NodeSettings.MinReplicas,
+					Leaders:     []string{leaderClusterRpc},
+					Followers:   orphanIps[1:]}
+
+				topics.Set(*topicName, topic)
+				*topicReply = topic
+				return nil
 			}
-
-			var leaderClusterRpc string
-			if err := node.Client.Call("Peer.Lead", orphanIps, &leaderClusterRpc); err != nil {
-				errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
-				return err
-			}
-
-			orphanNodes.DropN(int(config.NodeSettings.ClusterSize))
-
-			topic := structs.Topic{
-				TopicName:   *topicName,
-				MinReplicas: config.NodeSettings.MinReplicas,
-				Leaders:     []string{leaderClusterRpc},
-				Followers:   orphanIps[1:]}
-
-			topics.Set(*topicName, topic)
-			*topicReply = topic
-			return nil
 		}
 
 		return InsufficientNodesForCluster("")
