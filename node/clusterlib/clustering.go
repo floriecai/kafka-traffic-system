@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"sync"
+	"time"
 )
 
 type Mode int
@@ -21,7 +22,7 @@ type PeerCMap struct {
 	Map     map[string]Peer
 }
 
-///////////// Map functions for concurrent Peer Map //////////////////
+///////////// Map functions for synchronized Peer Map //////////////////
 func (pm *PeerCMap) Get(k string) (Peer, bool) {
 	pm.MapLock.RLock()
 	defer pm.MapLock.RUnlock()
@@ -39,6 +40,12 @@ func (pm *PeerCMap) Delete(k string) {
 	pm.MapLock.Lock()
 	defer pm.MapLock.Unlock()
 	delete(pm.Map, k)
+}
+
+func (pm *PeerCMap) GetCount() int {
+	pm.MapLock.Lock()
+	defer pm.MapLock.Unlock()
+	return len(*pm)
 }
 
 ///////////// Map functions for concurrent Peer Map //////////////////
@@ -71,6 +78,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 	DirectFollowersList = make(map[string]int)
 	NodeMode = Leader
 
+	successCount := 0
 	for _, ip := range ips {
 		if ip == LeaderAddr {
 			continue
@@ -115,9 +123,11 @@ func BecomeLeader(ips []string, LeaderAddr string) (err error) {
 		FollowerListLock.Unlock()
 
 		startPeerHb(ip)
-		// unlock
+		successCount++
 	}
-	return err
+
+	go WatchFollowerCount(/*FIXME, need server setting*/5, LeaderAddr)
+	return nil
 }
 
 func FollowLeader(msg FollowMeMsg, addr string) (err error) {
@@ -284,5 +294,54 @@ func NodeDeathHandler(ip string) {
 	default:
 		// no default behavior
 		fmt.Println("serious error occured in NodeDeathHandler")
+	}
+}
+
+// Makes sure that there are always enough followers in the cluster. A leader
+// will never stop being leader of a topic under normal operation, so this
+// function has no exit conditions. Intended to be called as a goroutine.
+func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
+	for {
+		time.Sleep(3 * time.Second())
+		count := PeerMap.GetCount()
+		numToGet := count - requiredNumFollowers
+		if numToGet <= 0 {
+			continue
+		}
+
+		var nodeAddr string
+		for i := range(numToGet) {
+			err := ServerClient.Call("TServer.TakeNode", "", &nodeAddr)
+			if err != nil {
+				// Sleep and try again later, no point requesting any more
+				break
+			}
+
+			conn, err := net.Dial("tcp", nodeAddr)
+			if err != nil {
+				continue
+			}
+
+			client := rpc.NewClient(conn)
+			addPeer(nodeAddr, client, NodeDeathHandler, FollowerId)
+
+			FollowerListLock.Lock()
+			DirectFollowersList[nodeAddr] = FollowerId
+			////////////////////////////
+
+			// It's ok if it fails, gaps in follower ID sequence will not mean anything
+			msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId}
+			fmt.Printf("Count Watcher: telling node with ip %s to follow me\n", ip)
+			err = client.Call("Peer.FollowMe", msg, &_ignored)
+			if err != nil {
+				continue
+			}
+
+			FollowerId++
+			////////////////////////////
+			FollowerListLock.Unlock()
+
+			startPeerHb(ip)
+		}
 	}
 }
