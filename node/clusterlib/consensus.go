@@ -3,12 +3,6 @@
 This file contains the consensus protocol functions. This is both for data
 consensus as well as leader nomination consensus.
 
-Current TODOs:
-- peerId: what type is this?
-- tieBreakLatestNum: not sure about implementation (depends on above)
-- WriteAfterConsent: nothing currently done when datum consensus is achieved
-- leader election: what do on completion?
-
 */
 package node
 
@@ -105,7 +99,6 @@ func StartConsensusProtocol() {
 			// case 2: we should connect to the lowest follower
 			time.Sleep(ELECTION_ATTEMPT_FOLLOW_WAIT * time.Second)
 			fmt.Printf("Try to follow this leader: %s\n\n", lowestFollowerIp)
-			// TODO: send follow rpc to lowestFollowerIp
 			err := PeerFollowThatNode(lowestFollowerIp)
 			if err == nil {
 				// FIXME: election not actually complete?

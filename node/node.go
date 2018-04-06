@@ -170,12 +170,6 @@ func (c PeerRpc) Follow(ip string, _ignored2 *string) error {
 	return err
 }
 
-// Follower -> Follower rpc that is used by the caller to become a peer of this node
-func (c PeerRpc) Connect(_ignored1 string, _ignored2 *string) error {
-	//TODO:
-	return nil
-}
-
 // Node -> Node RPC that is used to notify of liveliness
 func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 	id++
