@@ -82,6 +82,7 @@ func StartConsensusProtocol() error {
 
 				// Get entire dataset from Followers
 				// 1) Scan for highest VersionNumber
+
 				var max int
 				for _, v := range latestVersions {
 					if max < v {
@@ -89,11 +90,12 @@ func StartConsensusProtocol() error {
 					}
 				}
 
+				fmt.Println(fmt.Sprintf(ERR_COL+"MAX VERSION NUM IS: %d"+ERR_END, max))
 				// Set the next WriteId to be after the highestLatestVersion and send back to node main
 				writeIdCh <- max + 1
 
 				// Aggregate any missing data
-				if err := GetMissingData(max + 1); err != nil {
+				if err := GetMissingData(max); err != nil {
 					failErr = ERR_COL + "ELECTION PROTOCOL COULD NOT BE COMPLETE BECAUSE COULD NOT REBUILD DATA" + ERR_END
 					break
 				}

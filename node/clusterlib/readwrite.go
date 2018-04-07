@@ -71,10 +71,10 @@ func (e IncompleteDataError) Error() string {
 
 ////////////////////////////////////
 
-func MountFiles(path string, writeIdCh chan int) {
+func MountFiles(path string, writeCh chan int) {
 	VersionListLock = sync.Mutex{}
 	VersionList = make([]FileData, 0)
-	writeIdCh = writeIdCh
+	writeIdCh = writeCh
 	DataPath = path
 	fname := filepath.Join(path, "data.json")
 
@@ -191,13 +191,15 @@ func GetMissingData(latestVersion int) error {
 	}
 
 	// No data has been written
-	if latestVersion == 0 {
+	versionLen := len(VersionList)
+	fmt.Printf("Version len is: %d, latestVersion: %d\n", versionLen, latestVersion)
+	if latestVersion == 0 || latestVersion == versionLen {
 		return nil
 	}
 
 	// Find missing versions
 	var missingVersions map[int]bool = make(map[int]bool)
-	versionLen := len(VersionList)
+	fmt.Printf("FirstMismatch: %d, Missing Versions: %+v", FirstMismatch, missingVersions)
 	// i is for index in the VersionList
 	// m the index we're looking for
 	for i, m := FirstMismatch, FirstMismatch; i < latestVersion; i, m = i+1, m+1 {
