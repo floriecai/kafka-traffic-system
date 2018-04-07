@@ -69,11 +69,14 @@ func MountFiles(path string) {
 
 	// First time a node has registered with a server
 	if _, err := os.Stat(fname); os.IsNotExist(err) {
-		_, err := os.Create(fname)
+		f, err := os.Create(fname)
 		if err != nil {
 			checkError(err, "MountFiles CreateFiles")
 			log.Fatalf("Couldn't create file [%s]", fname)
 		}
+
+		f.Sync()
+		defer f.Close()
 
 		return
 	}
