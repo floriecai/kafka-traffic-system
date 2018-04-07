@@ -1,29 +1,23 @@
+# An interactive CLI application to help automate the demo
+# Usage: ruby demo.rb
+
 require 'rubygems'
 require 'net/ssh'
 require 'thread'
 
-# INSTANCE VARIABLES
+###############################################################################
+## INSTANCE VARIABLES
+###############################################################################
+
 @USERNAME = "416"
 @RESOURCE_GROUP = "416p2"
 @SERVER_IP_PORT = "20.36.31.108:12345"
 @VM_INDEX = "-1"
 
-# DEMO METHODS
+###############################################################################
+## AZURE METHODS
+###############################################################################
 
-# TEST
-def echo(ip, pw)
-	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
-		ssh.exec!("echo 'Hello World!'") do
-			|ch, stream, line|
-			puts line
-		end
-		ssh.close()
-	end
-	puts ""
-end
-
-
-# AZURE
 def az_vm_list()
 	puts "Listing VMs"
 	# If anyone has a better way of parsing computerName please change this
@@ -57,10 +51,12 @@ def az_vm_dealloc()
 	puts ""
 end
 
+###############################################################################
+## GO METHODS
+###############################################################################
 
-# GO
 def go_run_server(ip, pw)
-	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+	Net::SSH.start(ip, @USERNAME, password: pw) do |ssh|
 		puts "Running server"
 		ssh.exec!("source ~/.profile && cd proj2_g4w8_g6y9a_i6y8_o5z8;"\
 			      "go run server/server.go -c server/config.json") do
@@ -73,10 +69,11 @@ def go_run_server(ip, pw)
 end
 
 
-def go_run_node(ip, pw)
-	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+def go_run_node(ip, pw, dir)
+	Net::SSH.start(ip, @USERNAME, password: pw) do |ssh|
 		puts "Running node"
-		ssh.exec!("source ~/.profile && cd ~/proj2_g4w8_g6y9a_i6y8_o5z8; go run node/node.go #{@SERVER_IP_PORT}") do
+		ssh.exec!("source ~/.profile && cd ~/proj2_g4w8_g6y9a_i6y8_o5z8;"\
+				  "go run node/node.go 20.36.31.108:12345 #{dir}") do
 			|ch, stream, line|
 			puts line
 		end
@@ -85,7 +82,10 @@ def go_run_node(ip, pw)
 	puts ""
 end
 
-# GIT
+###############################################################################
+## GIT METHODS
+###############################################################################
+
 def git_status(ip, pw)
 	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
 		puts "Printing out status"
@@ -163,8 +163,37 @@ def git_push(ip, pw)
 	puts ""
 end
 
+###############################################################################
+## SHELL METHODS
+###############################################################################
 
-# PROMPT METHODS
+def shell_mkdir(ip, pw, dir)
+	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+		ssh.exec!("mkdir #{dir}") do
+			|ch, stream, line|
+			puts line
+		end
+		ssh.close()
+	end
+	puts ""
+end
+
+
+def shell_custom(ip, pw, cmd)
+	Net::SSH.start(ip, @USERNAME, :password => pw) do |ssh|
+		ssh.exec!(cmd) do
+			|ch, stream, line|
+			puts line
+		end
+		ssh.close()
+	end
+	puts ""
+end
+
+###############################################################################
+## PROMPT METHODS
+###############################################################################
+
 def vm_prompt()
 	puts "What VM operation would you like to perform?"
 	puts "(1) Select a VM to work with"
@@ -223,8 +252,8 @@ end
 def start_prompt(ip, pw)
 	puts "Choose an option:"
 	puts "(1) Run Go files"
-	puts "(2) Git"
-	puts "(3) Test"
+	puts "(2) Run Git operations"
+	puts "(3) Run shell commands"
 	input = gets.chomp
 	puts ""
 	case input
@@ -233,7 +262,7 @@ def start_prompt(ip, pw)
 	when "2"
 		git_prompt(ip, pw)
 	when "3"
-		echo(ip, pw)
+		shell_prompt(ip, pw)
 	when "q"
 		exit
 	else
@@ -265,6 +294,9 @@ end
 
 
 def git_prompt(ip, pw)
+	puts "===================================================="
+	puts "IMPORTANT: Git commands are currently not supported!"
+	puts "===================================================="
 	puts "Which Git command would you like to run?"
 	puts "(1) Status"
 	puts "(2) Checkout"
@@ -306,7 +338,31 @@ def git_prompt(ip, pw)
 end
 
 
-# LOOP METHODS
+def shell_prompt()
+	puts "Which file would you like to run?"
+	puts "(1) mkdir"
+	puts "(2) Custom"
+	input = gets.chomp
+	case input
+	when "q"
+		exit
+	when "1"
+		puts "What is the directory you would like to create?"
+		dir = gets.chomp
+		shell_mkdir(ip, pw, dir)
+	when "2"
+		shell_custom(ip, pw)
+	else
+		puts "Invalid input. Please try again"
+		puts ""
+		go_prompt()
+	end
+end
+
+###############################################################################
+## LOOP METHODS
+###############################################################################
+
 def az_loop()
 	finished = false
 	until finished
@@ -323,10 +379,12 @@ def az_loop()
 	end
 end
 
+###############################################################################
+## MAIN METHOD
+###############################################################################
 
-# MAIN
 puts "CPSC416 Project 2 Demo Script"
-puts "Stop with 'q' at any time"
+puts "Exit with 'q' at any time"
 puts ""
 
 # Start-up
