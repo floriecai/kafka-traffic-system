@@ -1,7 +1,7 @@
-package lib
+package consumer
 
 import (
-	"../structs"
+	"../../structs"
 	"fmt"
 )
 

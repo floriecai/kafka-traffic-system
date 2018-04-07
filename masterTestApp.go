@@ -8,7 +8,7 @@ A different app will be used to receive data from the distributed data queues.
 package main
 
 import (
-	"./lib"
+	"./lib/producer"
 	"./movement"
 	"fmt"
 	"net"
@@ -59,7 +59,7 @@ func main() {
 		}
 
 		myId := producerNodeId
-		wSess, err := lib.OpenTopic("gps_coords", os.Args[1], fmt.Sprintf("Writer %d", myId))
+		wSess, err := producer.OpenTopic("gps_coords", os.Args[1], fmt.Sprintf("Writer %d", myId))
 		if err != nil {
 			continue
 		}
