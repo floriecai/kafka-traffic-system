@@ -2,14 +2,14 @@
 This file contains functions that should be used by producer clients.
 */
 
-package lib
+package producer
 
 import (
 	"fmt"
 	"net"
 	"net/rpc"
 
-	"../structs"
+	"../../structs"
 )
 
 type DisconnectedError string

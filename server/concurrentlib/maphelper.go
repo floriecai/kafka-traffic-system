@@ -1,6 +1,8 @@
 package concurrentlib
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/rpc"
@@ -55,10 +57,25 @@ func (tm *TopicCMap) Get(k string) (structs.Topic, bool) {
 	return v, exists
 }
 
-func (tm *TopicCMap) Set(k string, v structs.Topic) {
+// Set map AND commits to disk
+func (tm *TopicCMap) Set(k string, v structs.Topic, path string) error {
 	tm.MapLock.Lock()
 	defer tm.MapLock.Unlock()
 	tm.Map[k] = v
+
+	topicArray := make([]structs.Topic, 0)
+	for _, topic := range tm.Map {
+		topicArray = append(topicArray, topic)
+	}
+
+	data, err := json.MarshalIndent(topicArray, "", "  ")
+
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(path, data, 0644)
+
 }
 
 func (o *Orphanage) Append(orphan structs.Node) {
@@ -76,5 +93,6 @@ func (o *Orphanage) DropN(n int) []structs.Node {
 		log.Println("\x1b[31;1m"+"INDEX OUT OF RANGE ERROR!!!! LEN %d, WANTS TO DROP : %d"+"\x1b[0m", len(o.Orphans), n)
 	}
 	o.Orphans = o.Orphans[n:]
+	o.Len -= uint32(n)
 	return droppedNodes
 }

@@ -68,6 +68,7 @@ type TServer struct{}
 type Config struct {
 	NodeSettings structs.NodeSettings `json:"node-settings"`
 	RpcIpPort    string               `json:"rpc-ip-port"`
+	DataPath     string               `json:"data-filepath"`
 }
 
 const (
@@ -184,6 +185,22 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 	return nil
 }
 
+func (s *TServer) TakeNode(ignored string, nodeAddr *string) error {
+	orphanNodes.Lock()
+	defer orphanNodes.Unlock()
+
+	if orphanNodes.Len <= 0 {
+		outLog.Println("TakeNode: No nodes available")
+		return fmt.Errorf("No nodes available for taking")
+	}
+
+	node := orphanNodes.DropN(1)
+	*nodeAddr = node[0].Address
+	outLog.Printf("TakeNode: gave %s\n", *nodeAddr)
+
+	return nil
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Producer API RPC
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,11 +208,12 @@ func (s *TServer) HeartBeat(addr string, _ignored *bool) error {
 func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) error {
 	// Check if there is already a Topic with the same name
 	if _, ok := topics.Get(*topicName); !ok {
+		orphanNodes.Lock()
+		defer orphanNodes.Unlock()
+
 		for {
 			if orphanNodes.Len >= uint32(config.NodeSettings.ClusterSize) {
-				orphanNodes.Lock()
 				lNode := orphanNodes.Orphans[0]
-				orphanNodes.Unlock()
 
 				allNodes.Lock()
 				node, exists := allNodes.all[lNode.Address]
@@ -213,8 +231,6 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 
 				orphanIps := make([]string, 0)
 
-				orphanNodes.Lock()
-				defer orphanNodes.Unlock()
 				for i, orphan := range orphanNodes.Orphans {
 					if i >= int(config.NodeSettings.ClusterSize) {
 						break
@@ -236,7 +252,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 					MinReplicas: config.NodeSettings.MinReplicas,
 					Leaders:     []string{leaderClusterRpc}}
 
-				topics.Set(*topicName, topic)
+				topics.Set(*topicName, topic, config.DataPath)
 				*topicReply = topic
 				return nil
 			}
@@ -263,8 +279,29 @@ func (s *TServer) GetTopic(topicName *string, topicReply *structs.Topic) error {
 
 func (s *TServer) UpdateTopicLeader(topic *structs.Topic, ignore *string) (err error) {
 	fmt.Println(ERR_COL + "TOPIC LEADER IS BEING UPDATED" + ERR_END)
-	topics.Set(topic.TopicName, *topic)
-	// TODO commit changes to topic to disk
+	return topics.Set(topic.TopicName, *topic, config.DataPath)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Disk operations to survive server failure
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+func readDiskData() error {
+	data, err := ioutil.ReadFile(config.DataPath)
+	if err != nil {
+		return err
+	}
+
+	var topicsJson []structs.Topic
+	if err = json.Unmarshal(data, topicsJson); err != nil {
+		return err
+	}
+
+	// Not concurrent so it's fine to not lock
+	for _, topic := range topicsJson {
+		topics.Map[topic.TopicName] = topic
+	}
+
 	return nil
 }
 
@@ -281,6 +318,22 @@ func main() {
 	}
 
 	readConfigOrDie(*path)
+
+	// Check if there was previous data on this server
+	if _, err := os.Stat(config.DataPath); os.IsExist(err) {
+		if err = readDiskData(); err != nil {
+			handleErrorFatal("Could not read topics data from disk", err)
+		}
+	} else {
+		f, err := os.Create(config.DataPath)
+		if err != nil {
+			fmt.Println("Config path: %s", config.DataPath)
+			handleErrorFatal("Couldn't create file "+config.DataPath, err)
+		}
+
+		f.Sync()
+		f.Close()
+	}
 
 	rand.Seed(time.Now().UnixNano())
 

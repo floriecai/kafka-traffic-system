@@ -1,6 +1,7 @@
 package node
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 
 const HBTIMEOUT = 4
 const HBINTERVAL = 2
+const SERVER_RECONNECT_WAIT = 10
 
 var ServerClient *rpc.Client
 
@@ -21,24 +23,62 @@ var (
 	HBInterval  uint32
 )
 
-func ConnectToServer(ip string) {
+var serverDeathCh chan bool
+
+func InitiateServerConnection(serverIp, peerAddr string) {
+	serverDeathCh = make(chan bool)
+
+	serverConnProtocol := func() error {
+		// Connect to the Server
+		fmt.Println("Connecting to server...")
+		if err := ConnectToServer(serverIp); err != nil {
+			return err
+		}
+
+		ServerRegister(peerAddr)
+		go ServerHeartBeat(peerAddr)
+		return nil
+	}
+
+	// When the server dies, try to reconnect to server every SERVER_RECONNECT_WAIT seconds
+	go func() {
+		for {
+			select {
+			case <-serverDeathCh:
+				log.Println(ERR_COL + "SERVER HAS DIED" + ERR_END)
+				for {
+					time.Sleep(SERVER_RECONNECT_WAIT * time.Second)
+					if err := serverConnProtocol(); err == nil {
+						break
+					}
+				}
+			}
+		}
+	}()
+
+	if err := serverConnProtocol(); err != nil {
+		log.Fatalf(err.Error())
+	}
+}
+
+func ConnectToServer(ip string) error {
 	LocalAddr, _ := net.ResolveTCPAddr("tcp", ":0")
 	ServerAddr, _ := net.ResolveTCPAddr("tcp", ip)
 	conn, err := net.DialTCP("tcp", LocalAddr, ServerAddr)
 	if err != nil {
-		log.Fatalf("Could not connect to server")
+		return errors.New("Could not connect to server")
 	} else {
 		log.Println("Connecting to server on:", conn.LocalAddr().String())
 		ServerClient = rpc.NewClient(conn)
+		return nil
 	}
 }
 
-// Not sure if this belongs here
 func ServerRegister(addr string) {
 	var resp structs.NodeSettings
 	err := ServerClient.Call("TServer.Register", addr, &resp)
 	if err != nil {
-		fmt.Printf("Error in heartbeat::Register()\n%s", err)
+		fmt.Printf("Error in heartbeat::Register()\n%s\n", err)
 	}
 	MinReplicas = resp.MinReplicas
 	ClusterSize = resp.ClusterSize
@@ -53,7 +93,11 @@ func ServerHeartBeat(addr string) {
 	for {
 		select {
 		case <-heartbeat:
-			ServerClient.Call("TServer.HeartBeat", addr, &_ignored)
+			err := ServerClient.Call("TServer.HeartBeat", addr, &_ignored)
+			if err != nil {
+				serverDeathCh <- true
+				return
+			}
 		}
 	}
 }
