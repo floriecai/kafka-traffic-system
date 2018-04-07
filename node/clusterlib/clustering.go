@@ -316,7 +316,7 @@ func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
 		time.Sleep(3 * time.Second)
 		count := PeerMap.GetCount()
 		numToGet := requiredNumFollowers - count
-		if numToGet <= 0 {
+		if numToGet <= 1 {
 			continue
 		}
 
