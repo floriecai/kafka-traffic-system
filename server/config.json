@@ -4,5 +4,6 @@
         "heartbeat": 10000,
         "min-replicas": 2,
         "cluster-size": 4
-    }
+    },
+    "data-filepath": "/home/floriecai/tmp/server/server.json"
 }

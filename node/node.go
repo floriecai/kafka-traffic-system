@@ -263,10 +263,8 @@ func main() {
 	// Open Peer to Peer RPC
 	ListenPeerRpc(ln2)
 	// Connect to the Server
-	node.ConnectToServer(serverIP)
-	node.ServerRegister(PeerRpcAddr)
-	// Start Server Heartbeat
-	go node.ServerHeartBeat(PeerRpcAddr)
+
+	node.InitiateServerConnection(serverIP, PeerRpcAddr)
 	// Open Cluster to App RPC
 	ListenClusterRpc(ln1)
 }

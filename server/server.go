@@ -68,6 +68,7 @@ type TServer struct{}
 type Config struct {
 	NodeSettings structs.NodeSettings `json:"node-settings"`
 	RpcIpPort    string               `json:"rpc-ip-port"`
+	DataPath     string               `json:"data-filepath"`
 }
 
 const (
@@ -236,7 +237,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 					MinReplicas: config.NodeSettings.MinReplicas,
 					Leaders:     []string{leaderClusterRpc}}
 
-				topics.Set(*topicName, topic)
+				topics.Set(*topicName, topic, config.DataPath)
 				*topicReply = topic
 				return nil
 			}
@@ -263,8 +264,29 @@ func (s *TServer) GetTopic(topicName *string, topicReply *structs.Topic) error {
 
 func (s *TServer) UpdateTopicLeader(topic *structs.Topic, ignore *string) (err error) {
 	fmt.Println(ERR_COL + "TOPIC LEADER IS BEING UPDATED" + ERR_END)
-	topics.Set(topic.TopicName, *topic)
-	// TODO commit changes to topic to disk
+	return topics.Set(topic.TopicName, *topic, config.DataPath)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Disk operations to survive server failure
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+func readDiskData() error {
+	data, err := ioutil.ReadFile(config.DataPath)
+	if err != nil {
+		return err
+	}
+
+	var topicsJson []structs.Topic
+	if err = json.Unmarshal(data, topicsJson); err != nil {
+		return err
+	}
+
+	// Not concurrent so it's fine to not lock
+	for _, topic := range topicsJson {
+		topics.Map[topic.TopicName] = topic
+	}
+
 	return nil
 }
 
@@ -281,6 +303,22 @@ func main() {
 	}
 
 	readConfigOrDie(*path)
+
+	// Check if there was previous data on this server
+	if _, err := os.Stat(config.DataPath); os.IsExist(err) {
+		if err = readDiskData(); err != nil {
+			handleErrorFatal("Could not read topics data from disk", err)
+		}
+	} else {
+		f, err := os.Create(config.DataPath)
+		if err != nil {
+			fmt.Println("Config path: %s", config.DataPath)
+			handleErrorFatal("Couldn't create file "+config.DataPath, err)
+		}
+
+		f.Sync()
+		f.Close()
+	}
 
 	rand.Seed(time.Now().UnixNano())
 
