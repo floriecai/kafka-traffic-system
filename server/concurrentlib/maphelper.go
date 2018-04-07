@@ -93,5 +93,6 @@ func (o *Orphanage) DropN(n int) []structs.Node {
 		log.Println("\x1b[31;1m"+"INDEX OUT OF RANGE ERROR!!!! LEN %d, WANTS TO DROP : %d"+"\x1b[0m", len(o.Orphans), n)
 	}
 	o.Orphans = o.Orphans[n:]
+	o.Len -= uint32(n)
 	return droppedNodes
 }

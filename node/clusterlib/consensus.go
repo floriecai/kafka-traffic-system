@@ -211,7 +211,7 @@ func PeerAcceptThisNode(ip string) error {
 		////////////////////////////
 		// It's ok if it fails, gaps in follower ID sequence will not mean anything
 		FollowerId += 1
-		msg := FollowMeMsg{MyAddr, DirectFollowersList, FollowerId}
+		msg := FollowMeMsg{LeaderIp: MyAddr, FollowerIps: DirectFollowersList, YourId: FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n\n", ip)
 		var latestData uint
 		err = client.Call("Peer.FollowMe", msg, &latestData)

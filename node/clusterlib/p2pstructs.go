@@ -6,6 +6,7 @@ type FollowMeMsg struct {
 	LeaderIp    string
 	FollowerIps map[string]int
 	YourId      int
+	Data        []FileData
 }
 
 type ModFollowerListMsg struct {
