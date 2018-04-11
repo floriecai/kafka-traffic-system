@@ -5,5 +5,5 @@
         "min-replicas": 2,
         "cluster-size": 4
     },
-    "data-filepath": "~/proj2_g4w8_g679a_i6y8_o5z8/server/server.json"
+    "data-filepath": "/home/416/proj2_g4w8_g6y9a_i6y8_o5z8/server/server.json"
 }
