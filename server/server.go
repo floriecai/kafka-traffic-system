@@ -255,6 +255,8 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				topics.Set(*topicName, topic, config.DataPath)
 				*topicReply = topic
 				return nil
+			} else {
+				break
 			}
 		}
 

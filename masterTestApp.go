@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,8 +30,17 @@ func main() {
 	var files []string
 
 	root := "./testGraphs"
+	appMap := make(map[string][]string) // Id -> list of filepaths
+	currId := ""
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		files = append(files, path)
+		if info.IsDir() {
+			appMap[currId] = files
+			currId = info.Name()
+			files = nil
+		} else {
+			files = append(files, path)
+		}
+
 		return nil
 	})
 
@@ -45,55 +53,68 @@ func main() {
 		fmt.Println("Could not connect to internal:", err)
 	}
 
-	var producerNodeId = 0
-	for i, file := range files {
-		if i == 0 {
-			continue
-		}
+	for producerNodeId, files := range appMap {
+		for _, file := range files {
+			fmt.Println("Starting client node with graph file", file)
 
-		fmt.Println("Starting client node with graph file", file)
-
-		m, err, firstPoint := movement.CreateLocationGraph(file)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		myId := producerNodeId
-		wSess, err := producer.OpenTopic("gps_coords", os.Args[1], fmt.Sprintf("Writer %d", myId))
-		if err != nil {
-			continue
-		}
-
-		fn := func(p movement.Point) {
-			parseF := func(float1 float64) string {
-				return strconv.FormatFloat(float1, 'f', -1, 64)
+			m, err, firstPoint := movement.CreateLocationGraph(file)
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
 
-			fmt.Printf("ID%d: %s %s\n", myId, parseF(p.X), parseF(p.Y))
-			appendPoint(p)
+			myId := producerNodeId
 
-			datum := fmt.Sprintf("%s %s\n", parseF(p.X), parseF(p.Y))
+			var topicName string
 
-			internalConn.Write([]byte(datum))
-			wSess.Write(datum)
+			// IDs 0,1,2 write to left side of WestMall
+			// IDs 3,4 write to right side of WestMall
+
+			// TODO UNCOMMENT IF WANT MULTIPLE TOPICS FOR DEMO
+			// if i, _ := strconv.ParseInt(filepath.Base(file), 10, 64); i < int64(2) {
+			// 	topicName = "westmall_left"
+			// } else {
+			// 	topicName = "westmall_right"
+			// }
+
+			topicName = "ubc"
+			wSess, err := producer.OpenTopic(topicName, os.Args[1], fmt.Sprintf("Writer %d", myId))
+			if err != nil {
+				continue
+			}
+
+			fn := func(p movement.Point) {
+				parseF := func(float1 float64) string {
+					return strconv.FormatFloat(float1, 'f', -1, 64)
+				}
+
+				// fmt.Printf("ID%d: %s %s\n", myId, parseF(p.X), parseF(p.Y))
+				appendPoint(p)
+
+				datum := fmt.Sprintf("%s %s\n", parseF(p.X), parseF(p.Y))
+
+				internalConn.Write([]byte(datum))
+				wSess.Write(datum)
+			}
+
+			// producerNodeId++
+
+			// Hardcoding speed for demo
+			f := float64(0.0002)
+
+			// parse the speed from the filename
+			// f, err := strconv.ParseFloat(file[strings.Index(file, "/")+1:], 64)
+			// if err != nil {
+			// 	continue
+			// }
+
+			// fmt.Println("PRINTING POINTS .... LEN : %d", len(m))
+			// fmt.Println("%+v\n\n", m)
+			go movement.Travel(firstPoint, m, f, fn)
 		}
-
-		producerNodeId++
-
-		// parse the speed from the filename
-		f, err := strconv.ParseFloat(file[strings.Index(file, "/")+1:], 64)
-		// fmt.Println("SPEED IS: %.2f", f)
-		if err != nil {
-			continue
-		}
-
-		// fmt.Println("PRINTING POINTS .... LEN : %d", len(m))
-		// fmt.Println("%+v\n\n", m)
-		go movement.Travel(firstPoint, m, f, fn)
 	}
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(120 * time.Second)
 }
 
 // Use this to atomically append a point to the global point slice
