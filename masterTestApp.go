@@ -8,8 +8,6 @@ A different app will be used to receive data from the distributed data queues.
 package main
 
 import (
-	"./lib/producer"
-	"./movement"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +16,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"./lib/producer"
+	"./movement"
 )
 
 var collectedPoints []movement.Point
@@ -65,10 +66,14 @@ func main() {
 		}
 
 		fn := func(p movement.Point) {
-			fmt.Printf("ID%d: %.2f %.2f\n", myId, p.X, p.Y)
+			parseF := func(float1 float64) string {
+				return strconv.FormatFloat(float1, 'f', -1, 64)
+			}
+
+			fmt.Printf("ID%d: %s %s\n", myId, parseF(p.X), parseF(p.Y))
 			appendPoint(p)
 
-			datum := fmt.Sprintf("%.2f %.2f\n", p.X, p.Y)
+			datum := fmt.Sprintf("%s %s\n", parseF(p.X), parseF(p.Y))
 
 			internalConn.Write([]byte(datum))
 			wSess.Write(datum)
@@ -78,9 +83,13 @@ func main() {
 
 		// parse the speed from the filename
 		f, err := strconv.ParseFloat(file[strings.Index(file, "/")+1:], 64)
+		// fmt.Println("SPEED IS: %.2f", f)
 		if err != nil {
 			continue
 		}
+
+		// fmt.Println("PRINTING POINTS .... LEN : %d", len(m))
+		// fmt.Println("%+v\n\n", m)
 		go movement.Travel(firstPoint, m, f, fn)
 	}
 

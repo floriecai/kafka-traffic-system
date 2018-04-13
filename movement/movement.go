@@ -126,6 +126,7 @@ func CreateLocationGraph(fname string) (map[Point]*Neighbours, error, Point) {
 			fmt.Println("Parse float failed:", match[1])
 			continue
 		}
+		// fmt.Println("FLOAT IS: %s", strconv.FormatFloat(float1, 'f', -1, 64))
 		p1 := Point{float1, float2}
 		if !gotFirstPoint {
 			firstPoint = p1
