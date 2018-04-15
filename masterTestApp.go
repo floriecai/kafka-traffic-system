@@ -10,7 +10,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,11 +46,6 @@ func main() {
 
 	if err != nil {
 		panic(err)
-	}
-
-	internalConn, err := net.Dial("tcp", os.Args[2])
-	if err != nil {
-		fmt.Println("Could not connect to internal:", err)
 	}
 
 	topicName := "ubc"

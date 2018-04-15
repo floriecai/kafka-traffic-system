@@ -43,7 +43,7 @@ var (
 	// i.e. [1,2,3,5,6], the first mismatch is 3
 	// since V5 does not match its index of 4. (note: WriteId's begin at 1)
 	// If FirstMismatch == -1 or Len(VersionList), we have all the writes
-	FirstMismatch int = -1
+	FirstMismatch int
 	isSorted      bool
 
 	// Channel for passing the new WriteId back to node main package
@@ -125,6 +125,9 @@ func WriteNode(topic, data string, version int) error {
 		last := VersionList[versionLen-1]
 		if last.Version > version {
 			isSorted = false
+		} else {
+			isSorted = true
+			FirstMismatch++
 		}
 	}
 
