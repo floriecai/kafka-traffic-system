@@ -189,15 +189,16 @@ func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) e
 // Used during the election process when attempting to connect to this leader
 func (c PeerRpc) Follow(msg node.FollowMsg, syncData *[]node.FileData) error {
 	fmt.Println("Peer.Follow from:", msg.Ip)
-	// TODO check if cluster size is already full, if it is, then do not accept this node
-
 	err := node.PeerAcceptThisNode(msg.Ip)
 
+	if err != nil {
+		return err
+	}
 	// Send back the missing data
 	missingData := node.DiffMissingData(msg.ContainingData)
 	*syncData = missingData
 
-	return err
+	return nil
 }
 
 // Node -> Node RPC that is used to notify of liveliness

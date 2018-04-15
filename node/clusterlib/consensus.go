@@ -7,6 +7,7 @@ consensus as well as leader nomination consensus.
 package node
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -184,7 +185,17 @@ func PeerAcceptThisNode(ip string) error {
 	if electionInProgress {
 		receiveFollowerChannel <- ip
 		return nil
-	} else if NodeMode == Leader && PeerMap.GetCount() < int(ClusterSize) {
+	} else if NodeMode == Leader {
+		numPeers := PeerMap.GetCount()
+		if numPeers == int(ClusterSize)-1 {
+			return errors.New("Cluster is full. Cannot accept this Follower")
+		}
+
+		if numPeers > int(ClusterSize)-1 {
+			fmt.Println(ERR_COL + "NUMBER OF PEERS EXCEEDS CLUSTER SIZE" + ERR_END)
+			return errors.New("Cluster is full. Cannot accept this Follower")
+		}
+
 		// from clustering.go
 		// it's likely this cluster is trying to join after
 		// an election so just accept it
