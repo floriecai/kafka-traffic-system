@@ -200,14 +200,15 @@ func Travel(start Point, graph map[Point]*Neighbours, speed float64, fn func(p P
 		}
 
 		// get the next path
+		neighbours, exists := graph[nextPoint]
+		tmp := getRandomNeighbour(neighbours, prevPoint)
 		prevPoint = nextPoint
-		neighbours, exists := graph[prevPoint]
+		nextPoint = tmp
 		if !exists {
 			fmt.Println("Point not in map", prevPoint)
 			return
 		}
 
-		nextPoint = getRandomNeighbour(neighbours, prevPoint)
 		fmt.Println("Prev:", prevPoint, "Next:", nextPoint)
 	}
 }
