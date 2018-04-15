@@ -8,13 +8,14 @@ A different app will be used to receive data from the distributed data queues.
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
-	"time"
 
 	"./lib/producer"
 	"./movement"
@@ -53,6 +54,7 @@ func main() {
 		fmt.Println("Could not connect to internal:", err)
 	}
 
+	topicName := "ubc"
 	for producerNodeId, files := range appMap {
 		for _, file := range files {
 			fmt.Println("Starting client node with graph file", file)
@@ -65,8 +67,6 @@ func main() {
 
 			myId := producerNodeId
 
-			var topicName string
-
 			// IDs 0,1,2 write to left side of WestMall
 			// IDs 3,4 write to right side of WestMall
 
@@ -77,7 +77,6 @@ func main() {
 			// 	topicName = "westmall_right"
 			// }
 
-			topicName = "ubc"
 			wSess, err := producer.OpenTopic(topicName, os.Args[1], fmt.Sprintf("Writer %d", myId))
 			if err != nil {
 				continue
@@ -93,11 +92,9 @@ func main() {
 
 				datum := fmt.Sprintf("%s %s\n", parseF(p.X), parseF(p.Y))
 
-				internalConn.Write([]byte(datum))
+				// internalConn.Write([]byte(datum))
 				wSess.Write(datum)
 			}
-
-			// producerNodeId++
 
 			// Hardcoding speed for demo
 			f := float64(0.0002)
@@ -114,7 +111,42 @@ func main() {
 		}
 	}
 
-	time.Sleep(120 * time.Second)
+	// New Write session for terminal inputs
+	// Listening on any terminal inputs so we can add writes on demand for the demo
+
+	var wSess *producer.WriteSession
+
+	for {
+		wSess, err = producer.OpenTopic("ubc", os.Args[1], fmt.Sprintf("Writer %d", 10))
+		if err != nil {
+			fmt.Println("Couldn't Open Write Session")
+			continue
+		} else {
+			break
+		}
+	}
+
+	for {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Println("Enter a point in the format: X,Y")
+		fmt.Print("Enter text: ")
+		text, _ := reader.ReadString('\n')
+		tokens := strings.Split(text, ",")
+
+		if len(tokens) == 2 {
+			x, y := tokens[0], tokens[1]
+
+			datum := fmt.Sprintf("%s %s\n", x, y)
+
+			// Write it 15 times because we can't see anything on the map otherwise
+			for i := 0; i < 15; i++ {
+				wSess.Write(datum)
+			}
+		} else {
+			fmt.Println("Not a valid point. Must be format: X,Y")
+		}
+	}
+	// time.Sleep(120 * time.Second)
 }
 
 // Use this to atomically append a point to the global point slice

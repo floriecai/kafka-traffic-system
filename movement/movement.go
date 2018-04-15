@@ -187,28 +187,35 @@ func Travel(start Point, graph map[Point]*Neighbours, speed float64, fn func(p P
 
 	nextPoint := getRandomNeighbour(neighbours)
 
-	for {
-		// get the path iterator
-		pointgen := linePointsGen(prevPoint, nextPoint, speed)
-		x, y, e := pointgen()
+	// Keep running the travel function for 90s
+loop:
+	for timeout := time.After(90 * time.Second); ; {
+		select {
+		case <-timeout:
+			break loop
+		default:
+			// get the path iterator
+			pointgen := linePointsGen(prevPoint, nextPoint, speed)
+			x, y, e := pointgen()
 
-		// travel the path
-		for e == nil {
-			fn(Point{x, y})
-			x, y, e = pointgen()
-			time.Sleep(100 * time.Millisecond)
+			// travel the path
+			for e == nil {
+				fn(Point{x, y})
+				x, y, e = pointgen()
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			// get the next path
+			neighbours, exists := graph[nextPoint]
+			if !exists {
+				fmt.Println("Point not in map", nextPoint)
+				return
+			}
+
+			prevPoint = nextPoint
+			nextPoint = getRandomNeighbour(neighbours)
+			fmt.Println("Prev:", prevPoint, "Next:", nextPoint)
 		}
-
-		// get the next path
-		neighbours, exists := graph[nextPoint]
-		if !exists {
-			fmt.Println("Point not in map", nextPoint)
-			return
-		}
-
-		prevPoint = nextPoint
-		nextPoint = getRandomNeighbour(neighbours)
-		fmt.Println("Prev:", prevPoint, "Next:", nextPoint)
 	}
 }
 

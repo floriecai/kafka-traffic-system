@@ -1,8 +1,11 @@
 package consumer
 
 import (
-	"../../structs"
 	"fmt"
+	"net"
+	"net/rpc"
+
+	"../../structs"
 )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,8 +45,6 @@ func (e ConnectionError) Error() string {
 	return fmt.Sprintf("Error attempting to connect: %s", string(e))
 }
 
-
-
 // </ERROR DEFINITIONS>
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -59,24 +60,24 @@ type ReadSession struct {
 }
 
 //type Consumer interface {
-	// Returns the Topic associated with the given gpsCoordinates
-	// Can return the following errors:
-	// - TopicDoesNotExistError
-	//GetCurrentLocationCluster(gpsCoordinates GPSCoordinates) (topic structs.Topic, err error)
+// Returns the Topic associated with the given gpsCoordinates
+// Can return the following errors:
+// - TopicDoesNotExistError
+//GetCurrentLocationCluster(gpsCoordinates GPSCoordinates) (topic structs.Topic, err error)
 
-	// Returns the Topic the client will connect to and read from
-	// Can return the following errors:
-	// - TopicDoesNotExistError
-	// - DisconnectedServerError
-	//OpenTopic(topicName string) (topic structs.Topic, err error)
+// Returns the Topic the client will connect to and read from
+// Can return the following errors:
+// - TopicDoesNotExistError
+// - DisconnectedServerError
+//OpenTopic(topicName string) (topic structs.Topic, err error)
 
-	// Returns a list of all GPSCoordinates that have been written to the Topic
-	// Can returen the following errors:
-	// - DataUnvailableError
-	//Read(topicName string) (gpsCoordinates structs.GPSCoordinates, err error)
+// Returns a list of all GPSCoordinates that have been written to the Topic
+// Can returen the following errors:
+// - DataUnvailableError
+//Read(topicName string) (gpsCoordinates structs.GPSCoordinates, err error)
 //}
 
-func GetTopic(topicName string)(*ReadSession, error) {
+func GetTopic(topicName string, serverAddr string, myId string) (*ReadSession, error) {
 	fmt.Println("Attempting server dial")
 	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
@@ -128,15 +129,15 @@ func (s *ReadSession) Close() error {
 // there is a connection error.
 func (s *ReadSession) Read() ([]string, error) {
 	if s.leaderConn == nil {
-		return DisconnectedError("")
+		return nil, DisconnectedError("")
 	}
 
 	req := s.topicName
 	var data []string
 
-	err := s.leaderConn.Call("Cluster.WriteToCluster", req, &data)
+	err := s.leaderConn.Call("Cluster.ReadFromCluster", req, &data)
 
-	return data
+	return data, err
 }
 
 // </API>

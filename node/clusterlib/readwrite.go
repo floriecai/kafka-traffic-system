@@ -365,6 +365,7 @@ func GetConfirmedWrites() []string {
 	}
 
 	writes := make([]string, 0)
+	fmt.Println(ERR_COL+"FirsMismatch %d"+ERR_END, FirstMismatch)
 	for _, fdata := range VersionList[:FirstMismatch] {
 		writes = append(writes, fdata.Data)
 	}
