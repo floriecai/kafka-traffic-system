@@ -213,8 +213,8 @@ func PeerAcceptThisNode(ip string) error {
 		FollowerId += 1
 		msg := FollowMeMsg{LeaderIp: MyAddr, FollowerIps: DirectFollowersList, YourId: FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n\n", ip)
-		var latestData uint
-		err = client.Call("Peer.FollowMe", msg, &latestData)
+		var ignore uint
+		err = client.Call("Peer.FollowMe", msg, &ignore)
 		////////////////////////////
 		FollowerListLock.RUnlock()
 		if err != nil {
@@ -260,11 +260,15 @@ func PeerFollowThatNode(ip string, prpc string) error {
 	client := rpc.NewClient(conn)
 	defer client.Close()
 
-	var _ignored string
-	err = client.Call("Peer.Follow", prpc, &_ignored)
+	var _ignored []FileData
+
+	msg := FollowMsg{Ip: prpc}
+	err = client.Call("Peer.Follow", msg, &_ignored)
 	if err != nil {
 		return err
 	}
+
+	LeaderConn = client
 	return nil
 
 }

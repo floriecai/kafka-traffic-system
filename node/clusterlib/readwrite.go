@@ -184,6 +184,28 @@ func CountConfirmedWrites(writeStatusCh chan bool, numRequiredWrites, maxFailure
 	return writeReplicatedCh
 }
 
+// Diffs between the data a node has and returns its missing data compared to local VersionList
+// Called on Leader node's when Followers ask to rejoin their cluster
+func DiffMissingData(containingData map[int]bool) []FileData {
+	missingData := make([]FileData, 0)
+	versionLen := len(VersionList)
+
+	if !isSorted {
+		sortVersionList()
+	}
+
+	if len(containingData) != versionLen {
+		for i := 0; i < versionLen; i++ {
+			if !containingData[i+1] { // writeId's begin at 1, so we +1 compared to index i
+				missingData = append(missingData, VersionList[i])
+			}
+		}
+	}
+
+	return missingData
+}
+
+// Gets missing data when node is newly elected Leader and now needs a complete set of writes
 // Returns error if cannot find data
 func GetMissingData(latestVersion int) error {
 	if !isSorted {

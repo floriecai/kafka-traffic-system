@@ -20,3 +20,8 @@ type PropagateWriteReq struct {
 	VersionNum int
 	LeaderId   string
 }
+
+type FollowMsg struct {
+	Ip             string       // Follower's ip address
+	ContainingData map[int]bool // Map of versionNum -> bool that the follower node contains
+}

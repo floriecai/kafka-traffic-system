@@ -318,7 +318,6 @@ func (s *TServer) GetTopic(topicName *string, topicReply *structs.Topic) error {
 
 func (s *TServer) UpdateTopicLeader(topic *structs.Topic, ignore *string) (err error) {
 	fmt.Println(ERR_COL + "TOPIC LEADER IS BEING UPDATED" + ERR_END)
-	// TODO Check if leader is in allNodes. Might have rejoined and not re-registered with server
 	return topics.Set(topic.TopicName, *topic, config.DataPath)
 }
 
