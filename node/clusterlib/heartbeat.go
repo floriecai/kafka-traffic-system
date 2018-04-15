@@ -35,7 +35,10 @@ func InitiateServerConnection(serverIp, peerAddr string) {
 			return err
 		}
 
-		ServerRegister(peerAddr)
+		err := AttemptRejoin(peerAddr)
+		if err != nil {
+			ServerRegister(peerAddr)
+		}
 		go ServerHeartBeat(peerAddr)
 		return nil
 	}
@@ -216,4 +219,35 @@ func createPeerTimeout(secs time.Duration) (timeout chan bool) {
 		timeout <- true
 	}()
 	return timeout
+}
+
+
+// Function to check if there was a previous topic and we should join it now
+func AttemptRejoin(pRpcAddr string) error {
+	var topic structs.Topic
+	var resp structs.NodeSettings
+	// A topic name exists but a followerId is not set
+	if len(TopicName) > 0 && FollowerId == 0 {
+		err := ServerClient.Call("TServer.GetTopic", TopicName, &topic)
+
+		// Attempt to follow the leader
+		err = PeerFollowThatNode(topic.Leaders[1], pRpcAddr)
+		if err != nil {
+			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			return err
+		}
+
+		// Call Rejoin instead of Register and do register things
+		err = ServerClient.Call("TServer.Rejoin", pRpcAddr, &resp)
+		if err != nil {
+			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			return err
+		}
+		MinReplicas = resp.MinReplicas
+		ClusterSize = resp.ClusterSize
+		HBInterval = resp.HeartBeat
+
+		return nil
+	}
+	return fmt.Errorf("Nothing to rejoin")
 }

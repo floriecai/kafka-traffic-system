@@ -20,7 +20,8 @@ type Node struct {
 type Topic struct {
 	TopicName   string
 	MinReplicas uint8
-	Leaders     []string // list of ip addresses of each node
+	Leaders     []string // [0] = ClusterRpcAddr
+					 	 // [1] = PeerRpcAddr
 }
 
 ////////////////////// RPC STRUCTS //////////////////////

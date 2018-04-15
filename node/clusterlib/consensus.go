@@ -107,7 +107,7 @@ func StartConsensusProtocol() error {
 				topic := structs.Topic{
 					TopicName:   TopicName,
 					MinReplicas: MinReplicas,
-					Leaders:     []string{ClusterRpcAddr},
+					Leaders:     []string{ClusterRpcAddr, MyAddr},
 				}
 				// If the server is down, we need to continuously attempt to notify it until
 				// the server is aware of the new leader
@@ -124,7 +124,7 @@ func StartConsensusProtocol() error {
 			// case 2: we should connect to the lowest follower
 			time.Sleep(ELECTION_ATTEMPT_FOLLOW_WAIT * time.Second)
 			fmt.Printf("Try to follow this leader: %s\n\n", lowestFollowerIp)
-			err := PeerFollowThatNode(lowestFollowerIp)
+			err := PeerFollowThatNode(lowestFollowerIp, MyAddr)
 			if err == nil {
 				fmt.Printf("ELECTION COMPLETE: following %s\n\n", lowestFollowerIp)
 				break
@@ -238,7 +238,7 @@ func PeerAcceptThisNode(ip string) error {
 
 // Function PeerFollowThatNode should be called if this node wants to follow
 // the ipaddress of the given node
-func PeerFollowThatNode(ip string) error {
+func PeerFollowThatNode(ip string, prpc string) error {
 	electionLock.Lock()
 	defer electionLock.Unlock()
 
@@ -261,7 +261,7 @@ func PeerFollowThatNode(ip string) error {
 	defer client.Close()
 
 	var _ignored string
-	err = client.Call("Peer.Follow", MyAddr, &_ignored)
+	err = client.Call("Peer.Follow", prpc, &_ignored)
 	if err != nil {
 		return err
 	}

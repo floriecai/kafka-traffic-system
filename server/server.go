@@ -144,6 +144,45 @@ func (s *TServer) Register(n string, nodeSettings *structs.NodeSettings) error {
 	return nil
 }
 
+
+
+// Rejoin Nodes to a cluster
+func (s *TServer) Rejoin(n string, nodeSettings *structs.NodeSettings) error {
+	allNodes.Lock()
+	defer allNodes.Unlock()
+
+	for _, node := range allNodes.all {
+		if node.Address == n {
+			return AddressAlreadyRegisteredError(n)
+		}
+	}
+
+	outLog.Println("Register::Connecting to address: ", n)
+	localAddr, err := net.ResolveTCPAddr("tcp", ":0")
+	checkError(err, "GetPeers:ResolvePeerAddr")
+
+	nodeAddr, err := net.ResolveTCPAddr("tcp", n)
+	checkError(err, "GetPeers:ResolveLocalAddr")
+
+	conn, err := net.DialTCP("tcp", localAddr, nodeAddr)
+	checkError(err, "GetPeers:DialTCP")
+
+	client := rpc.NewClient(conn)
+
+	allNodes.all[n] = &structs.Node{
+		Address:         n,
+		Client:          client,
+		RecentHeartbeat: time.Now().UnixNano()}
+
+	go monitor(n, time.Millisecond*time.Duration(config.NodeSettings.HeartBeat))
+
+	*nodeSettings = config.NodeSettings
+
+	outLog.Printf("Got Rejoin from %s\n", GREEN_COL+n+ERR_END)
+
+	return nil
+}
+
 // Writes to disk any connections that have been made to the server along
 // with their corresponding topics (if any)
 func updateNodeMap(addr string, topicName string, server *TServer) error {
@@ -250,7 +289,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				topic := structs.Topic{
 					TopicName:   *topicName,
 					MinReplicas: config.NodeSettings.MinReplicas,
-					Leaders:     []string{leaderClusterRpc}}
+					Leaders:     []string{leaderClusterRpc, lNode.Address}}
 
 				topics.Set(*topicName, topic, config.DataPath)
 				*topicReply = topic
