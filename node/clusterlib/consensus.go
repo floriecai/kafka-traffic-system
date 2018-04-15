@@ -184,7 +184,7 @@ func PeerAcceptThisNode(ip string) error {
 	if electionInProgress {
 		receiveFollowerChannel <- ip
 		return nil
-	} else if NodeMode == Leader {
+	} else if NodeMode == Leader && PeerMap.GetCount() < int(ClusterSize) {
 		// from clustering.go
 		// it's likely this cluster is trying to join after
 		// an election so just accept it
