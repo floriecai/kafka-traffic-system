@@ -221,7 +221,6 @@ func createPeerTimeout(secs time.Duration) (timeout chan bool) {
 	return timeout
 }
 
-
 // Function to check if there was a previous topic and we should join it now
 func AttemptRejoin(pRpcAddr string) error {
 	var topic structs.Topic

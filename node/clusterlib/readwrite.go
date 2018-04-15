@@ -191,10 +191,13 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 	versionLen := len(VersionList)
 
 	if !isSorted {
+		VersionListLock.Lock()
 		sortVersionList()
+		VersionListLock.Unlock()
 	}
 
 	if len(containingData) != versionLen {
+		fmt.Println(ERR_COL+"DiffsMissingData:: Follower node has %d numWrites, Leader node has %d numWrites"+ERR_END, len(containingData), versionLen)
 		for i := 0; i < versionLen; i++ {
 			if !containingData[i+1] { // writeId's begin at 1, so we +1 compared to index i
 				missingData = append(missingData, VersionList[i])
@@ -209,7 +212,9 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 // Returns error if cannot find data
 func GetMissingData(latestVersion int) error {
 	if !isSorted {
+		VersionListLock.Lock()
 		sortVersionList()
+		VersionListLock.Unlock()
 	}
 
 	// No data has been written

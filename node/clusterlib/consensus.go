@@ -260,15 +260,22 @@ func PeerFollowThatNode(ip string, prpc string) error {
 	client := rpc.NewClient(conn)
 	defer client.Close()
 
-	var _ignored []FileData
+	var fileData []FileData
 
 	msg := FollowMsg{Ip: prpc}
-	err = client.Call("Peer.Follow", msg, &_ignored)
+	err = client.Call("Peer.Follow", msg, &fileData)
 	if err != nil {
 		return err
 	}
 
 	LeaderConn = client
+
+	VersionListLock.Lock()
+	defer VersionListLock.Unlock()
+	VersionList = append(VersionList, fileData...)
+	sortVersionList()
+
+	fmt.Println("Prev numWrites: %d, New numWrites after sync: %d", len(VersionList)-len(fileData), len(VersionList))
 	return nil
 
 }
