@@ -185,7 +185,7 @@ func Travel(start Point, graph map[Point]*Neighbours, speed float64, fn func(p P
 		return
 	}
 
-	nextPoint := getRandomNeighbour(neighbours)
+	nextPoint := getRandomNeighbour(neighbours, prevPoint)
 
 	// Keep running the travel function for 90s
 loop:
@@ -207,29 +207,43 @@ loop:
 
 			// get the next path
 			neighbours, exists := graph[nextPoint]
+			tmp := getRandomNeighbour(neighbours, prevPoint)
+			prevPoint = nextPoint
+			nextPoint = tmp
 			if !exists {
-				fmt.Println("Point not in map", nextPoint)
+				fmt.Println("Point not in map", prevPoint)
 				return
 			}
 
-			prevPoint = nextPoint
-			nextPoint = getRandomNeighbour(neighbours)
 			fmt.Println("Prev:", prevPoint, "Next:", nextPoint)
 		}
 	}
 }
 
 /*
-Gets a random neighbour from a list of neighbours
+Gets a random neighbour from a list of neighbours. Will not select
+prevPoint if it is the list of neighbours.
 */
-func getRandomNeighbour(neighbours *Neighbours) Point {
-	if len(*neighbours) == 0 {
+func getRandomNeighbour(neighbours *Neighbours, prevPoint Point) Point {
+	switch len(*neighbours) {
+	case 0:
 		return Point{0, 0}
+	case 1:
+		return (*neighbours)[0]
+	case 2:
+		if (*neighbours)[1] == prevPoint {
+			return (*neighbours)[0]
+		} else {
+			return (*neighbours)[1]
+		}
+	default:
+		idx := rand.Int() % len(*neighbours)
+		for (*neighbours)[idx] == prevPoint {
+			idx = rand.Int() % len(*neighbours)
+		}
+
+		return (*neighbours)[idx]
 	}
-
-	idx := rand.Int() % len(*neighbours)
-
-	return (*neighbours)[idx]
 }
 
 // Get the slope and y-intercept of a line formed by two points
