@@ -110,8 +110,6 @@ func BecomeLeader(ips []string, LeaderAddr string) (latestVersions []int, err er
 
 		// Write lock when modifying the direct followers list
 		FollowerListLock.Lock()
-		// Start follower Id at 1
-		FollowerId++
 		DirectFollowersList[ip] = FollowerId
 		////////////////////////////
 
@@ -127,6 +125,7 @@ func BecomeLeader(ips []string, LeaderAddr string) (latestVersions []int, err er
 		}
 
 		latestVersions = append(latestVersions, latestVersion)
+		FollowerId++
 		////////////////////////////
 		FollowerListLock.Unlock()
 
