@@ -364,7 +364,7 @@ func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
 			FollowerListLock.Lock()
 			DirectFollowersList[nodeAddr] = FollowerId
 
-			var ignored string
+			var latestVersion int
 
 			VersionListLock.Lock()
 			sortVersionList()
@@ -372,7 +372,7 @@ func WatchFollowerCount(requiredNumFollowers int, LeaderAddr string) {
 
 			msg := FollowMeMsg{LeaderAddr, DirectFollowersList, FollowerId, VersionList}
 			fmt.Printf("Count Watcher: telling node with ip %s to follow me\n", nodeAddr)
-			err = client.Call("Peer.FollowMe", msg, &ignored)
+			err = client.Call("Peer.FollowMe", msg, &latestVersion)
 			startPeerHb(nodeAddr)
 			if err != nil {
 				continue

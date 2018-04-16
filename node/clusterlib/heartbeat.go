@@ -229,7 +229,7 @@ func AttemptRejoin(pRpcAddr string) error {
 	if len(TopicName) > 0 && FollowerId == 0 {
 		err := ServerClient.Call("TServer.GetTopic", TopicName, &topic)
 		if err != nil {
-			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			fmt.Printf("Error in heartbeat::Rejoin()::GetTopic\n%s\n", err)
 			return err
 		}
 
@@ -237,14 +237,14 @@ func AttemptRejoin(pRpcAddr string) error {
 		rejoin := true
 		err = PeerFollowThatNode(topic.Leaders[1], pRpcAddr, rejoin)
 		if err != nil {
-			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			fmt.Printf("Error in heartbeat::Rejoin()::FollowLeader\n%s\n", err)
 			return err
 		}
 
 		// Call Rejoin instead of Register and do register things
 		err = ServerClient.Call("TServer.Rejoin", pRpcAddr, &resp)
 		if err != nil {
-			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			fmt.Printf("Error in heartbeat::Rejoin()::Rejoin\n%s\n", err)
 			return err
 		}
 		MinReplicas = resp.MinReplicas

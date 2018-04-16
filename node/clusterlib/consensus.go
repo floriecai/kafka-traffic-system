@@ -225,8 +225,8 @@ func PeerAcceptThisNode(ip string) error {
 		FollowerId += 1
 		msg := FollowMeMsg{LeaderIp: MyAddr, FollowerIps: DirectFollowersList, YourId: FollowerId}
 		fmt.Printf("Telling node with ip %s to follow me\n\n", ip)
-		var ignore uint
-		err = client.Call("Peer.FollowMe", msg, &ignore)
+		var latestVersion int
+		err = client.Call("Peer.FollowMe", msg, &latestVersion)
 		////////////////////////////
 		FollowerListLock.RUnlock()
 		if err != nil {
