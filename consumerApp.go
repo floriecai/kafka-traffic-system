@@ -50,7 +50,8 @@ func main() {
 		fmt.Println("Type: 'read' if you want to read the updated data")
 		text, _ := reader.ReadString('\n')
 
-		if text != "read" {
+		if text != "read\n" {
+			fmt.Printf("Could not understand input: [%s]. \nPlease text 'read' if you wish you read the latest data\n\n", text)
 			continue
 		}
 

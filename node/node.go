@@ -51,7 +51,7 @@ func InitializeDataStructs() {
 			select {
 			case wId := <-WriteIdCh:
 				// Set new WriteId
-				fmt.Println(ERR_COL + "New WriteId set" + ERR_END)
+				fmt.Println(ERR_COL+"New WriteId set %d"+ERR_END, wId)
 				WriteLock.Lock()
 				WriteId = wId
 				WriteLock.Unlock()
@@ -222,21 +222,17 @@ func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
 func (c PeerRpc) GetWrites(requestedWrites map[int]bool, writeData *[]node.FileData) error {
 	writes := make([]node.FileData, 0)
 	for id := range requestedWrites {
-		// If it's an id less than the FirstMismatch, we know that the id matches
-		// the index in VersionList
-		if id < node.FirstMismatch {
-			writes = append(writes, node.VersionList[id])
-		}
-
-		// The data needed is out of order in VersionList, so do linear search
 		node.VersionListLock.Lock()
+
 		found := false
-		for _, fdata := range node.VersionList[node.FirstMismatch:] {
+		for _, fdata := range node.VersionList {
 			if fdata.Version == id {
 				writes = append(writes, fdata)
 				found = true
 			}
 		}
+
+		*writeData = writes
 
 		if !found {
 			log.Println(ERR_COL+"Received GetWrites for new Leader but does not have requested write[%d]"+ERR_END, id)

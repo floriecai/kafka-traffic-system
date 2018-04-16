@@ -189,7 +189,7 @@ func Travel(start Point, graph map[Point]*Neighbours, speed float64, fn func(p P
 
 	// Keep running the travel function for 90s
 loop:
-	for timeout := time.After(60 * time.Second); ; {
+	for timeout := time.After(30 * time.Second); ; {
 		select {
 		case <-timeout:
 			break loop

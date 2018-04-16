@@ -84,6 +84,7 @@ func StartConsensusProtocol() error {
 				// Get entire dataset from Followers
 				// 1) Scan for highest VersionNumber
 
+				fmt.Printf(ERR_COL+"LatestVersions is: %+v\n"+ERR_END, latestVersions)
 				var max int
 				for _, v := range latestVersions {
 					if max < v {
@@ -125,7 +126,7 @@ func StartConsensusProtocol() error {
 			// case 2: we should connect to the lowest follower
 			time.Sleep(ELECTION_ATTEMPT_FOLLOW_WAIT * time.Second)
 			fmt.Printf("Try to follow this leader: %s\n\n", lowestFollowerIp)
-			err := PeerFollowThatNode(lowestFollowerIp, MyAddr)
+			err := PeerFollowThatNode(lowestFollowerIp, MyAddr, false)
 			if err == nil {
 				fmt.Printf("ELECTION COMPLETE: following %s\n\n", lowestFollowerIp)
 				break
@@ -249,7 +250,7 @@ func PeerAcceptThisNode(ip string) error {
 
 // Function PeerFollowThatNode should be called if this node wants to follow
 // the ipaddress of the given node
-func PeerFollowThatNode(ip string, prpc string) error {
+func PeerFollowThatNode(ip string, prpc string, isRejoin bool) error {
 	electionLock.Lock()
 	defer electionLock.Unlock()
 
@@ -281,10 +282,12 @@ func PeerFollowThatNode(ip string, prpc string) error {
 
 	LeaderConn = client
 
-	VersionListLock.Lock()
-	defer VersionListLock.Unlock()
-	VersionList = append(VersionList, fileData...)
-	sortVersionList()
+	if isRejoin {
+		VersionListLock.Lock()
+		defer VersionListLock.Unlock()
+		VersionList = append(VersionList, fileData...)
+		sortVersionList()
+	}
 
 	fmt.Println("Prev numWrites: %d, New numWrites after sync: %d", len(VersionList)-len(fileData), len(VersionList))
 	return nil

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"./lib/producer"
 	"./movement"
@@ -111,15 +112,18 @@ func main() {
 	var wSess *producer.WriteSession
 
 	for {
-		wSess, err = producer.OpenTopic("ubc", os.Args[1], fmt.Sprintf("Writer %d", 10))
+		wSess, err = producer.OpenTopic(topicName, os.Args[1], fmt.Sprintf("Writer %d", 10))
 		if err != nil {
 			fmt.Println("Couldn't Open Write Session")
+			time.Sleep(10 * time.Second)
 			continue
 		} else {
 			break
 		}
 	}
 
+	// Wait until the movement graphs have completed, and then poll stdin
+	time.Sleep(70 * time.Second)
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("Enter a point in the format: X,Y")
@@ -133,14 +137,16 @@ func main() {
 			datum := fmt.Sprintf("%s %s\n", x, y)
 
 			// Write it 15 times because we can't see anything on the map otherwise
-			for i := 0; i < 15; i++ {
-				wSess.Write(datum)
+			for i := 0; i < 10; i++ {
+				err := wSess.Write(datum)
+				if err != nil {
+					fmt.Println("ERROR IN WRITE.")
+				}
 			}
 		} else {
-			fmt.Println("Not a valid point. Must be format: X,Y")
+			fmt.Println("Not a valid point. Must be format: X,Y\n\n")
 		}
 	}
-	// time.Sleep(120 * time.Second)
 }
 
 // Use this to atomically append a point to the global point slice
