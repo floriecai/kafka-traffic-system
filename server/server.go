@@ -259,9 +259,9 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 				// Node may have disconnected and was removed from allNodes map. We do not
 				// remove stale nodes from orphanNodes
 				if !exists {
-					log.Println("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
-					log.Println("All nodes: %+v", allNodes.all)
-					log.Println("Orphan Nodes: %+v", orphanNodes.Orphans)
+					log.Printf("Discrepancy in orphan nodes vs. Node Map. [%s] does not exist in NodeMap\n", lNode.Address)
+					log.Printf("All nodes: %+v\n", allNodes.all)
+					log.Printf("Orphan Nodes: %+v\n", orphanNodes.Orphans)
 					orphanNodes.DropN(1)
 					continue
 				}
@@ -278,7 +278,7 @@ func (s *TServer) CreateTopic(topicName *string, topicReply *structs.Topic) erro
 
 				var leaderClusterRpc string
 				if err := node.Client.Call("Peer.Lead", orphanIps, &leaderClusterRpc); err != nil {
-					errLog.Println("Node [%s] could not accept Leader position.", lNode.Address)
+					errLog.Printf("Node [%s] could not accept Leader position.\n", lNode.Address)
 					return err
 				}
 
@@ -328,17 +328,22 @@ func (s *TServer) UpdateTopicLeader(topic *structs.Topic, ignore *string) (err e
 func readDiskData() error {
 	data, err := ioutil.ReadFile(config.DataPath)
 	if err != nil {
+		fmt.Println("ReadFile failed")
 		return err
 	}
 
 	var topicsJson []structs.Topic
-	if err = json.Unmarshal(data, topicsJson); err != nil {
+	if err = json.Unmarshal(data, &topicsJson); err != nil {
+		fmt.Println("Unmarshal failed")
 		return err
 	}
+
+	fmt.Println("Looking for old topics")
 
 	// Not concurrent so it's fine to not lock
 	for _, topic := range topicsJson {
 		topics.Map[topic.TopicName] = topic
+		fmt.Println("TOPIC:", topic)
 	}
 
 	return nil
@@ -359,14 +364,16 @@ func main() {
 	readConfigOrDie(*path)
 
 	// Check if there was previous data on this server
-	if _, err := os.Stat(config.DataPath); os.IsExist(err) {
+	fmt.Printf("Config path: %s\n", config.DataPath)
+	if _, err := os.Stat(config.DataPath); err == nil {
+		fmt.Printf("Data path exists; checking for old topics\n")
 		if err = readDiskData(); err != nil {
 			handleErrorFatal("Could not read topics data from disk", err)
 		}
 	} else {
+		fmt.Printf("Data path does not exist; creating\n")
 		f, err := os.Create(config.DataPath)
 		if err != nil {
-			fmt.Println("Config path: %s", config.DataPath)
 			handleErrorFatal("Couldn't create file "+config.DataPath, err)
 		}
 
