@@ -332,6 +332,10 @@ func readDiskData() error {
 		return err
 	}
 
+	if len(data) == 0 {
+		return nil
+	}
+
 	var topicsJson []structs.Topic
 	if err = json.Unmarshal(data, &topicsJson); err != nil {
 		fmt.Println("Unmarshal failed")
@@ -364,14 +368,9 @@ func main() {
 	readConfigOrDie(*path)
 
 	// Check if there was previous data on this server
-	fmt.Printf("Config path: %s\n", config.DataPath)
-	if _, err := os.Stat(config.DataPath); err == nil {
-		fmt.Printf("Data path exists; checking for old topics\n")
-		if err = readDiskData(); err != nil {
-			handleErrorFatal("Could not read topics data from disk", err)
-		}
-	} else {
-		fmt.Printf("Data path does not exist; creating\n")
+
+	if _, err := os.Stat(config.DataPath); os.IsNotExist(err) {
+		fmt.Println(GREEN_COL + "No Previous Data" + ERR_END)
 		f, err := os.Create(config.DataPath)
 		if err != nil {
 			handleErrorFatal("Couldn't create file "+config.DataPath, err)
@@ -379,6 +378,11 @@ func main() {
 
 		f.Sync()
 		f.Close()
+	} else {
+		fmt.Println(ERR_COL + "PREVIOUS DATA ON SERVER" + ERR_END)
+		if err = readDiskData(); err != nil {
+			handleErrorFatal("Could not read topics data from disk", err)
+		}
 	}
 
 	rand.Seed(time.Now().UnixNano())
