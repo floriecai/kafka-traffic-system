@@ -228,6 +228,10 @@ func AttemptRejoin(pRpcAddr string) error {
 	// A topic name exists but a followerId is not set
 	if len(TopicName) > 0 && FollowerId == 0 {
 		err := ServerClient.Call("TServer.GetTopic", TopicName, &topic)
+		if err != nil {
+			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
+			return err
+		}
 
 		// Attempt to follow the leader
 		rejoin := true
