@@ -10,6 +10,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,6 +48,11 @@ func main() {
 
 	if err != nil {
 		panic(err)
+	}
+
+	internalConn, err := net.Dial("tcp", os.Args[2])
+	if err != nil {
+		fmt.Println("Could not connect to internal:", err)
 	}
 
 	topicName := "ubc"
@@ -87,7 +93,7 @@ func main() {
 
 				datum := fmt.Sprintf("%s %s\n", parseF(p.X), parseF(p.Y))
 
-				// internalConn.Write([]byte(datum))
+				internalConn.Write([]byte(datum))
 				wSess.Write(datum)
 			}
 
@@ -123,7 +129,7 @@ func main() {
 	}
 
 	// Wait until the movement graphs have completed, and then poll stdin
-	time.Sleep(70 * time.Second)
+	time.Sleep(50 * time.Second)
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("Enter a point in the format: X,Y")
@@ -142,6 +148,7 @@ func main() {
 				if err != nil {
 					fmt.Println("ERROR IN WRITE.")
 				}
+				internalConn.Write([]byte(datum))
 			}
 		} else {
 			fmt.Println("Not a valid point. Must be format: X,Y\n\n")
