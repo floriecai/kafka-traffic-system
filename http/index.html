@@ -79,6 +79,9 @@
               if (line === 'done')
                 return;
 
+              if (line === "") {
+                continue;
+              }
               var info = line.split(' ');
               x = parseFloat(info[0]);
               y = parseFloat(info[1]);

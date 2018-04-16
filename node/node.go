@@ -89,17 +89,18 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, _ignored *string) err
 		maxFailures := node.ClusterSize - numRequiredWrites - 1
 		writeVerdictCh := node.CountConfirmedWrites(writesCh, numRequiredWrites, maxFailures)
 
-		go func() {
+		go func(wId int) {
 			for ip, peer := range node.PeerMap.Map {
 				var writeConfirmed bool
 
 				resp := node.PropagateWriteReq{
 					Topic:      write.Topic,
-					VersionNum: WriteId,
+					VersionNum: wId,
 					LeaderId:   PublicIp,
 					Data:       write.Data,
 				}
 
+				fmt.Println(ERR_COL+"WRITE ID BEFORE CONFIRMWRITE: %d"+ERR_END, WriteId)
 				writeCall := peer.PeerConn.Go("Peer.ConfirmWrite", resp, &writeConfirmed, nil)
 
 				go func(wc *rpc.Call) {
@@ -115,7 +116,7 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, _ignored *string) err
 					}
 				}(writeCall)
 			}
-		}()
+		}(WriteId)
 
 		// Block on writeVerdictCh
 		writeSucceed := <-writeVerdictCh
@@ -210,6 +211,7 @@ func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 
 // Leader -> Follower RPC to commit write
 func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
+	fmt.Println(ERR_COL+"ConfirmWrite:: VersionNum %d"+ERR_END, req.VersionNum)
 	if err := node.WriteNode(req.Topic, req.Data, req.VersionNum); err != nil {
 		checkError(err, "ConfirmWrite")
 		return err
@@ -225,6 +227,8 @@ func (c PeerRpc) GetWrites(requestedWrites map[int]bool, writeData *[]node.FileD
 		node.VersionListLock.Lock()
 
 		found := false
+		fmt.Println("\n\nVersionList in GETWRITES")
+		fmt.Println("%+v", node.VersionList)
 		for _, fdata := range node.VersionList {
 			if fdata.Version == id {
 				writes = append(writes, fdata)

@@ -44,7 +44,6 @@ var (
 	// since V5 does not match its index of 4. (note: WriteId's begin at 1)
 	// If FirstMismatch == 0 or Len(VersionList), we have all the writes
 	FirstMismatch int
-	isSorted      bool
 
 	// Channel for passing the new WriteId back to node main package
 	writeIdCh chan int
@@ -116,18 +115,12 @@ func WriteNode(topic, data string, version int) error {
 	// Minor optimizations.
 	// We're assuming that writes often come in order and if its greater than the last
 	// item in the list, just append it.
-	// We keep track of isSorted to avoid having to iterate through the list
-	// when calling GetConfirmedReads
 	versionLen := len(VersionList)
 	if versionLen == 0 {
-		isSorted = true
 		FirstMismatch++
 	} else {
 		last := VersionList[versionLen-1]
-		if last.Version > version {
-			isSorted = false
-		} else {
-			isSorted = true
+		if last.Version <= version {
 			FirstMismatch++
 		}
 	}
@@ -149,19 +142,11 @@ func WriteNode(topic, data string, version int) error {
 // Errors:
 // IncompleteDataError - Not all writes have been received
 func ReadNode(topic string) ([]string, error) {
-	confirmedWrites := GetConfirmedWrites()
-
-	if len(confirmedWrites) != len(VersionList) {
-		return confirmedWrites, IncompleteDataError("")
+	if data, hasCompleteData := HasAllData(); hasCompleteData {
+		return data, nil
 	}
 
-	return confirmedWrites, nil
-
-	// if data, hasCompleteData := HasAllData(); hasCompleteData {
-	// 	return data, nil
-	// }
-
-	// return nil, IncompleteDataError("")
+	return nil, IncompleteDataError("")
 }
 
 // writeStatusCh - Channel to wait on for peers to write to whether they have confirmed the write
@@ -200,11 +185,9 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 	missingData := make([]FileData, 0)
 	versionLen := len(VersionList)
 
-	if !isSorted {
-		VersionListLock.Lock()
-		sortVersionList()
-		VersionListLock.Unlock()
-	}
+	VersionListLock.Lock()
+	sortVersionList()
+	VersionListLock.Unlock()
 
 	if len(containingData) != versionLen {
 		fmt.Println(ERR_COL+"DiffsMissingData:: Follower node has %d numWrites, Leader node has %d numWrites"+ERR_END, len(containingData), versionLen)
@@ -221,11 +204,9 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 // Gets missing data when node is newly elected Leader and now needs a complete set of writes
 // Returns error if cannot find data
 func GetMissingData(latestVersion int) error {
-	if !isSorted {
-		VersionListLock.Lock()
-		sortVersionList()
-		VersionListLock.Unlock()
-	}
+	VersionListLock.Lock()
+	sortVersionList()
+	VersionListLock.Unlock()
 
 	// No data has been written
 	versionLen := len(VersionList)
@@ -359,36 +340,10 @@ func sortVersionList() {
 	fmt.Println(GREEN_COL+"After sorting ... First Mismatch: %d"+ERR_END, FirstMismatch)
 }
 
-// Returns the longest list of continuous ordered writes
-// VersionList: [1,2,3,4,6,7,8] will return [1,2,3,4]
-// Note: The caller of this function is responsible for locking
-//       since it likely has to do additional work related to the VersionList
-func GetConfirmedWrites() []string {
-	VersionListLock.Lock()
-	defer VersionListLock.Unlock()
-
-	if !isSorted {
-		sortVersionList()
-	}
-
-	writes := make([]string, 0)
-	fmt.Println(ERR_COL+"FirsMismatch %d"+ERR_END, FirstMismatch)
-	fmt.Println(ERR_COL+"Len of Versionlist: %d"+ERR_END, len(VersionList))
-
-	for _, fdata := range VersionList[:FirstMismatch] {
-		writes = append(writes, fdata.Data)
-	}
-	return writes
-}
-
 // Returns list of data (empty list if does not contain all data),
 func HasAllData() (data []string, hasAllData bool) {
 	VersionListLock.Lock()
 	defer VersionListLock.Unlock()
-
-	if !isSorted {
-		sortVersionList()
-	}
 
 	data = make([]string, 0)
 	for i, fdata := range VersionList {
@@ -414,13 +369,8 @@ func GetLatestVersion() int {
 		return 0
 	}
 
-	if isSorted {
-		fmt.Println("IsSorted: Latest Version is: %d", VersionList[versionLen-1].Version)
-		return VersionList[versionLen-1].Version
-	}
-
 	var max int = 0
-	for _, fdata := range VersionList[:FirstMismatch] {
+	for _, fdata := range VersionList {
 		if max < fdata.Version {
 			max = fdata.Version
 		}
