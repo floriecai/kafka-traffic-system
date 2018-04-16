@@ -51,7 +51,7 @@ func InitializeDataStructs() {
 			select {
 			case wId := <-WriteIdCh:
 				// Set new WriteId
-				fmt.Println(ERR_COL + "New WriteId set" + ERR_END)
+				fmt.Println(ERR_COL+"New WriteId set %d"+ERR_END, wId)
 				WriteLock.Lock()
 				WriteId = wId
 				WriteLock.Unlock()
@@ -89,17 +89,18 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, _ignored *string) err
 		maxFailures := node.ClusterSize - numRequiredWrites - 1
 		writeVerdictCh := node.CountConfirmedWrites(writesCh, numRequiredWrites, maxFailures)
 
-		go func() {
+		go func(wId int) {
 			for ip, peer := range node.PeerMap.Map {
 				var writeConfirmed bool
 
 				resp := node.PropagateWriteReq{
 					Topic:      write.Topic,
-					VersionNum: WriteId,
+					VersionNum: wId,
 					LeaderId:   PublicIp,
 					Data:       write.Data,
 				}
 
+				// fmt.Println(ERR_COL+"WRITE ID BEFORE CONFIRMWRITE: %d"+ERR_END, WriteId)
 				writeCall := peer.PeerConn.Go("Peer.ConfirmWrite", resp, &writeConfirmed, nil)
 
 				go func(wc *rpc.Call) {
@@ -115,7 +116,7 @@ func (c ClusterRpc) WriteToCluster(write structs.WriteMsg, _ignored *string) err
 					}
 				}(writeCall)
 			}
-		}()
+		}(WriteId)
 
 		// Block on writeVerdictCh
 		writeSucceed := <-writeVerdictCh
@@ -189,15 +190,16 @@ func (c PeerRpc) RemoveFollower(msg node.ModFollowerListMsg, _ignored *string) e
 // Used during the election process when attempting to connect to this leader
 func (c PeerRpc) Follow(msg node.FollowMsg, syncData *[]node.FileData) error {
 	fmt.Println("Peer.Follow from:", msg.Ip)
-	// TODO check if cluster size is already full, if it is, then do not accept this node
-
 	err := node.PeerAcceptThisNode(msg.Ip)
 
+	if err != nil {
+		return err
+	}
 	// Send back the missing data
 	missingData := node.DiffMissingData(msg.ContainingData)
 	*syncData = missingData
 
-	return err
+	return nil
 }
 
 // Node -> Node RPC that is used to notify of liveliness
@@ -209,6 +211,7 @@ func (c PeerRpc) Heartbeat(ip string, reply *string) error {
 
 // Leader -> Follower RPC to commit write
 func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
+	// fmt.Println(ERR_COL+"ConfirmWrite:: VersionNum %d"+ERR_END, req.VersionNum)
 	if err := node.WriteNode(req.Topic, req.Data, req.VersionNum); err != nil {
 		checkError(err, "ConfirmWrite")
 		return err
@@ -221,21 +224,19 @@ func (c PeerRpc) ConfirmWrite(req node.PropagateWriteReq, writeOk *bool) error {
 func (c PeerRpc) GetWrites(requestedWrites map[int]bool, writeData *[]node.FileData) error {
 	writes := make([]node.FileData, 0)
 	for id := range requestedWrites {
-		// If it's an id less than the FirstMismatch, we know that the id matches
-		// the index in VersionList
-		if id < node.FirstMismatch {
-			writes = append(writes, node.VersionList[id])
-		}
-
-		// The data needed is out of order in VersionList, so do linear search
 		node.VersionListLock.Lock()
+
 		found := false
-		for _, fdata := range node.VersionList[node.FirstMismatch:] {
+		fmt.Println("\n\nVersionList in GETWRITES")
+		fmt.Println("%+v", node.VersionList)
+		for _, fdata := range node.VersionList {
 			if fdata.Version == id {
 				writes = append(writes, fdata)
 				found = true
 			}
 		}
+
+		*writeData = writes
 
 		if !found {
 			log.Println(ERR_COL+"Received GetWrites for new Leader but does not have requested write[%d]"+ERR_END, id)

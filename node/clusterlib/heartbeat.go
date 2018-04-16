@@ -230,7 +230,8 @@ func AttemptRejoin(pRpcAddr string) error {
 		err := ServerClient.Call("TServer.GetTopic", TopicName, &topic)
 
 		// Attempt to follow the leader
-		err = PeerFollowThatNode(topic.Leaders[1], pRpcAddr)
+		rejoin := true
+		err = PeerFollowThatNode(topic.Leaders[1], pRpcAddr, rejoin)
 		if err != nil {
 			fmt.Printf("Error in heartbeat::Rejoin()\n%s\n", err)
 			return err

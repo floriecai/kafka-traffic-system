@@ -42,9 +42,8 @@ var (
 	// where in VersionList are the Writes no longer ordered
 	// i.e. [1,2,3,5,6], the first mismatch is 3
 	// since V5 does not match its index of 4. (note: WriteId's begin at 1)
-	// If FirstMismatch == -1 or Len(VersionList), we have all the writes
-	FirstMismatch int = -1
-	isSorted      bool
+	// If FirstMismatch == 0 or Len(VersionList), we have all the writes
+	FirstMismatch int
 
 	// Channel for passing the new WriteId back to node main package
 	writeIdCh chan int
@@ -116,15 +115,13 @@ func WriteNode(topic, data string, version int) error {
 	// Minor optimizations.
 	// We're assuming that writes often come in order and if its greater than the last
 	// item in the list, just append it.
-	// We keep track of isSorted to avoid having to iterate through the list
-	// when calling GetConfirmedReads
 	versionLen := len(VersionList)
 	if versionLen == 0 {
-		isSorted = true
+		FirstMismatch++
 	} else {
 		last := VersionList[versionLen-1]
-		if last.Version > version {
-			isSorted = false
+		if last.Version <= version {
+			FirstMismatch++
 		}
 	}
 
@@ -145,13 +142,11 @@ func WriteNode(topic, data string, version int) error {
 // Errors:
 // IncompleteDataError - Not all writes have been received
 func ReadNode(topic string) ([]string, error) {
-	confirmedWrites := GetConfirmedWrites()
-
-	if len(confirmedWrites) != len(VersionList) {
-		return confirmedWrites, IncompleteDataError("")
+	if data, hasCompleteData := HasAllData(); hasCompleteData {
+		return data, nil
 	}
 
-	return confirmedWrites, nil
+	return nil, IncompleteDataError("")
 }
 
 // writeStatusCh - Channel to wait on for peers to write to whether they have confirmed the write
@@ -190,11 +185,9 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 	missingData := make([]FileData, 0)
 	versionLen := len(VersionList)
 
-	if !isSorted {
-		VersionListLock.Lock()
-		sortVersionList()
-		VersionListLock.Unlock()
-	}
+	VersionListLock.Lock()
+	sortVersionList()
+	VersionListLock.Unlock()
 
 	if len(containingData) != versionLen {
 		fmt.Println(ERR_COL+"DiffsMissingData:: Follower node has %d numWrites, Leader node has %d numWrites"+ERR_END, len(containingData), versionLen)
@@ -211,11 +204,9 @@ func DiffMissingData(containingData map[int]bool) []FileData {
 // Gets missing data when node is newly elected Leader and now needs a complete set of writes
 // Returns error if cannot find data
 func GetMissingData(latestVersion int) error {
-	if !isSorted {
-		VersionListLock.Lock()
-		sortVersionList()
-		VersionListLock.Unlock()
-	}
+	VersionListLock.Lock()
+	sortVersionList()
+	VersionListLock.Unlock()
 
 	// No data has been written
 	versionLen := len(VersionList)
@@ -257,17 +248,11 @@ func GetMissingData(latestVersion int) error {
 	// 2) no more Peers to request data from
 	// Case 2 should not happen if there fewer than ClusterSize/2 node failures
 
-	followers := make([]string, 0)
 	for ip := range DirectFollowersList {
-		followers = append(followers, ip)
-	}
-
-	for i := 0; i < len(followers); i++ {
 		if len(missingVersions) == 0 {
 			break
 		}
 
-		ip := followers[i]
 		peer, ok := PeerMap.Get(ip)
 		if !ok {
 			fmt.Println("Peer died")
@@ -275,9 +260,11 @@ func GetMissingData(latestVersion int) error {
 		}
 
 		var writeData []FileData
+
+		fmt.Println(ERR_COL+"Missing versions is:"+ERR_END+"%+v", missingVersions)
 		err := peer.PeerConn.Call("Peer.GetWrites", missingVersions, writeData)
 		if err != nil {
-			fmt.Println("Err to GetWrites for Peer [%s]", ERR_COL+string(i)+ERR_END)
+			fmt.Println(ERR_COL+"Err to GetWrites for Peer [%s]"+ERR_END, ip)
 			continue
 		}
 
@@ -334,46 +321,47 @@ func readFromDisk(fname string, clusterData *ClusterData) error {
 // Sorts VersionList by its version number and returns the first index
 // that does not match its version number
 // Returns length of VersionList if all indices match its version number
-func sortVersionList() int {
+func sortVersionList() {
 	sort.Slice(VersionList, func(i, j int) bool {
-		return VersionList[i].Version > VersionList[j].Version
+		return VersionList[i].Version < VersionList[j].Version
 	})
 
 	var j int
 	for i, fdata := range VersionList {
 		if i+1 != fdata.Version {
 			FirstMismatch = i
-			return i
+			fmt.Println(GREEN_COL+"After sorting ... First Mismatch: %d"+ERR_END, FirstMismatch)
+			return
 		}
 		j++
 	}
 
-	FirstMismatch = j + 1
-	return j + 1
+	FirstMismatch = j
+	fmt.Println(GREEN_COL+"After sorting ... First Mismatch: %d"+ERR_END, FirstMismatch)
 }
 
-// Returns the longest list of continuous ordered writes
-// VersionList: [1,2,3,4,6,7,8] will return [1,2,3,4]
-// Note: The caller of this function is responsible for locking
-//       since it likely has to do additional work related to the VersionList
-func GetConfirmedWrites() []string {
+// Returns list of data (empty list if does not contain all data),
+func HasAllData() (data []string, hasAllData bool) {
 	VersionListLock.Lock()
 	defer VersionListLock.Unlock()
 
-	if !isSorted {
-		sortVersionList()
+	data = make([]string, 0)
+	for i, fdata := range VersionList {
+		if i+1 != fdata.Version {
+			return nil, false
+		}
+
+		data = append(data, fdata.Data)
 	}
 
-	writes := make([]string, 0)
-	for _, fdata := range VersionList[:FirstMismatch] {
-		writes = append(writes, fdata.Data)
-	}
-	return writes
+	return data, true
 }
 
 // Return the highest version number the node has. If node has no data, returns 0
 func GetLatestVersion() int {
 	VersionListLock.Lock()
+
+	printVersionList()
 	defer VersionListLock.Unlock()
 
 	versionLen := len(VersionList)
@@ -381,12 +369,8 @@ func GetLatestVersion() int {
 		return 0
 	}
 
-	if isSorted {
-		return VersionList[versionLen-1].Version
-	}
-
 	var max int = 0
-	for _, fdata := range VersionList[:FirstMismatch] {
+	for _, fdata := range VersionList {
 		if max < fdata.Version {
 			max = fdata.Version
 		}
@@ -396,3 +380,13 @@ func GetLatestVersion() int {
 }
 
 /////////////// End VersionList Helpers ///////////////////
+
+func printVersionList() {
+	fmt.Println("Printing versionlist ...")
+
+	for i, v := range VersionList {
+		fmt.Printf("Index: %d, version: %+v\n", i, v)
+	}
+
+	fmt.Println("Version length is ... : %d", len(VersionList))
+}
