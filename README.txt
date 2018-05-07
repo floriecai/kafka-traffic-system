@@ -1,3 +1,8 @@
+Kafka Traffic System
+
+There are 2 client types: Producers & Consumers. Producers write to the data-stream (Topic), Consumers read from the stream. Based on the config settings, writes are replicated and can survive up to N failures in a cluster, where the cluster size is 2N + 1.
+
+
 // Requirements for config.json 
 
 ```
